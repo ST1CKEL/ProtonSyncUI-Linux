@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <defs>
+    <!-- Haupt-Hintergrundverlauf (Proton Violett zu Tiefblau/Violett) -->
+    <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#7B57EE"/>
+      <stop offset="60%" stop-color="#5535CE"/>
+      <stop offset="100%" stop-color="#3B1E9E"/>
+    </linearGradient>
+
+    <!-- Akzentverlauf (Cyan / Mint für Sync-Dynamik) -->
+    <linearGradient id="accentGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00F5D4"/>
+      <stop offset="100%" stop-color="#00BBF9"/>
+    </linearGradient>
+
+    <!-- Wolkenverlauf -->
+    <linearGradient id="cloudGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.95"/>
+      <stop offset="100%" stop-color="#EAE5FC" stop-opacity="0.85"/>
+    </linearGradient>
+
+    <!-- Weicher Schatten -->
+    <filter id="dropShadow" x="-10%" y="-10%" width="130%" height="130%">
+      <feDropShadow dx="0" dy="5" stdDeviation="4" flood-color="#1B0F4A" flood-opacity="0.35"/>
+    </filter>
+    
+    <filter id="iconShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="3" stdDeviation="2.5" flood-color="#000000" flood-opacity="0.25"/>
+    </filter>
+  </defs>
+
+  <!-- Basis-Squircle (GNOME HIG Stil) -->
+  <rect x="8" y="8" width="112" height="112" rx="26" fill="url(#bgGradient)" filter="url(#dropShadow)"/>
+
+  <!-- Subtile Glanzkante oben -->
+  <rect x="8.5" y="8.5" width="111" height="111" rx="25.5" fill="none" stroke="#FFFFFF" stroke-opacity="0.2" stroke-width="1"/>
+
+  <!-- Wolken-Silhouette im Hintergrund -->
+  <path d="M42 74 h44 a18 18 0 0 0 4-35.5 24 24 0 0 0 -45.5 -6 18 18 0 0 0 -2.5 41.5 z"
+        fill="url(#cloudGradient)"
+        filter="url(#iconShadow)"/>
+
+  <!-- Zwei-Wege-Synchronisationspfeile (Vordergrund) -->
+  <g filter="url(#iconShadow)">
+    <!-- Oberer Pfeil nach rechts (Upload / Lokal -> Cloud) -->
+    <g fill="#5535CE">
+      <path d="M42 58 h32 a4 4 0 0 0 4-4 v-4 l12 9 -12 9 v-4 a4 4 0 0 0 -4-4 H42 a4 4 0 0 1 0-8 z" />
+    </g>
+
+    <!-- Unterer Pfeil nach links (Download / Cloud -> Lokal) mit Cyan-Akzent -->
+    <g fill="url(#accentGradient)">
+      <path d="M86 70 H54 a4 4 0 0 0 -4 4 v4 l-12 -9 12 -9 v4 a4 4 0 0 0 4 4 h32 a4 4 0 0 1 0 8 z" />
+    </g>
+  </g>
+
+  <!-- Proton-Schutzschild-Akzentpunkt unten rechts -->
+  <circle cx="100" cy="100" r="10" fill="url(#accentGradient)" filter="url(#iconShadow)"/>
+  <path d="M96 100 l3 3 6 -6" stroke="#1E1045" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+</svg>

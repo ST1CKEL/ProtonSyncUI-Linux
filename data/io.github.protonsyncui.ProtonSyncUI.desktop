@@ -1,0 +1,31 @@
+[Desktop Entry]
+Type=Application
+Version=1.5
+
+# Der Dateiname dieser Datei muss dem app_id des Fensters entsprechen
+# (io.github.protonsyncui.ProtonSyncUI). Nur dann ordnet die Fensterleiste
+# unter Wayland das Fenster dieser Anwendung zu und zeigt Symbol und Namen.
+# Gesetzt wird der app_id in ui/application.py per GLib.set_prgname().
+
+Name=ProtonSyncUI
+GenericName=Proton Drive Synchronisation
+GenericName[de]=Proton-Drive-Synchronisation
+GenericName[en]=Proton Drive Synchronization
+Comment=Lokale Ordner mit Proton Drive synchronisieren (2-Wege, Upload, Download)
+Comment[de]=Lokale Ordner mit Proton Drive synchronisieren (2-Wege, Upload, Download)
+Comment[en]=Synchronize local folders with Proton Drive (two-way, upload, download)
+
+Exec=proton-sync-ui-gui
+Icon=io.github.protonsyncui.ProtonSyncUI
+Terminal=false
+
+Categories=Utility;Archiving;FileTools;
+Keywords=Backup;Sicherung;Proton;Drive;Sync;Synchronisation;Upload;Download;Cloud;Datensicherung;
+Keywords[de]=Backup;Sicherung;Proton;Drive;Sync;Synchronisation;Upload;Download;Cloud;Datensicherung;
+Keywords[en]=Backup;Proton;Drive;Sync;Synchronization;Upload;Download;Cloud;
+
+StartupNotify=true
+# Fuer X11 bzw. XWayland; unter Wayland zaehlt der app_id (s. o.).
+StartupWMClass=io.github.protonsyncui.ProtonSyncUI
+# KDE: Die Anwendung hat genau ein Hauptfenster.
+SingleMainWindow=true

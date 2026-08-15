@@ -1,0 +1,143 @@
+"""Ermittlung von Version und Anmeldezustand der Proton-Drive-CLI.
+
+Wird beim Start der Oberflaeche und vor jedem Lauf ausgefuehrt, damit
+Fehlermeldungen konkret ausfallen statt erst mitten im Upload aufzutauchen.
+"""
+
+from __future__ import annotations
+
+import re
+from dataclasses import dataclass
+from typing import Final
+
+from ..logging_setup import get_logger
+from .adapter import ProtonDriveAdapter
+from .errors import ProtonCliError, ProtonCliNotFoundError
+
+log = get_logger("cli_adapter.capabilities")
+
+# "Proton Drive CLI cli-drive@0.8.0+06e8c605"
+_CLI_VERSION_RE: Final = re.compile(r"cli-drive@(?P<version>[0-9][^\s+]*)")
+# "Proton Drive SDK js@0.21.0+06e8c605"
+_SDK_VERSION_RE: Final = re.compile(r"js@(?P<version>[0-9][^\s+]*)")
+
+#: Aelteste Fassung, gegen die dieser Adapter geprueft wurde.
+VERIFIED_CLI_VERSION: Final = "0.8.0"
+
+
+@dataclass(frozen=True, slots=True)
+class Capabilities:
+    """Was die vorgefundene CLI kann und ob sie benutzbar ist."""
+
+    binary_path: str | None
+    available: bool
+    raw_version: str = ""
+    cli_version: str = ""
+    sdk_version: str = ""
+    authenticated: bool = False
+    problem: str = ""
+
+    @property
+    def usable(self) -> bool:
+        """Wahr, wenn sofort synchronisiert werden kann."""
+        return self.available and self.authenticated
+
+    def describe(self) -> str:
+        """Kurzbeschreibung fuer Kommandozeile und Oberflaeche."""
+        if not self.available:
+            return "proton-drive nicht gefunden"
+        version = self.cli_version or "unbekannt"
+        state = "angemeldet" if self.authenticated else "nicht angemeldet"
+        return f"proton-drive {version} ({state})"
+
+
+def parse_version(raw: str) -> tuple[str, str]:
+    """Liest CLI- und SDK-Version aus der Ausgabe von ``--version``."""
+    cli_match = _CLI_VERSION_RE.search(raw)
+    sdk_match = _SDK_VERSION_RE.search(raw)
+    return (
+        cli_match.group("version") if cli_match else "",
+        sdk_match.group("version") if sdk_match else "",
+    )
+
+
+async def probe(
+    adapter: ProtonDriveAdapter | None = None, *, check_auth: bool = True
+) -> Capabilities:
+    """Prueft Verfuegbarkeit, Version und Anmeldezustand der CLI.
+
+    Wirft nicht, sondern beschreibt das Problem im Ergebnis -- die Oberflaeche
+    soll auch dann starten, wenn die CLI fehlt.
+    """
+    cli = adapter if adapter is not None else ProtonDriveAdapter()
+
+    try:
+        binary = cli.resolve_binary()
+    except ProtonCliNotFoundError as error:
+        log.warning("Proton-Drive-CLI nicht gefunden.")
+        return Capabilities(binary_path=None, available=False, problem=str(error))
+
+    try:
+        raw_version = await cli.version()
+    except ProtonCliError as error:
+        log.warning("Version der CLI konnte nicht ermittelt werden: %s", error)
+        return Capabilities(
+            binary_path=binary,
+            available=True,
+            problem=f"Die CLI antwortet nicht wie erwartet: {error}",
+        )
+
+    cli_version, sdk_version = parse_version(raw_version)
+    if cli_version and cli_version != VERIFIED_CLI_VERSION:
+        log.info(
+            "CLI-Version %s weicht von der geprueften Fassung %s ab. "
+            "Bei Syntaxfehlern bitte proton_sync_ui/cli_adapter/commands.py pruefen.",
+            cli_version,
+            VERIFIED_CLI_VERSION,
+        )
+
+    if not check_auth:
+        return Capabilities(
+            binary_path=binary,
+            available=True,
+            raw_version=raw_version,
+            cli_version=cli_version,
+            sdk_version=sdk_version,
+        )
+
+    try:
+        authenticated = await cli.check_authenticated()
+    except ProtonCliError as error:
+        return Capabilities(
+            binary_path=binary,
+            available=True,
+            raw_version=raw_version,
+            cli_version=cli_version,
+            sdk_version=sdk_version,
+            problem=f"Der Anmeldezustand konnte nicht geprueft werden: {error}",
+        )
+
+    problem = (
+        ""
+        if authenticated
+        else (
+            "Die Proton-Drive-CLI ist nicht angemeldet.\n\n"
+            "Bitte einmalig im Terminal ausfuehren:\n\n"
+            "    proton-drive auth login\n\n"
+            "Die Anmeldung oeffnet einen Browser. ProtonSyncUI verarbeitet dabei "
+            "keinerlei Zugangsdaten."
+        )
+    )
+
+    return Capabilities(
+        binary_path=binary,
+        available=True,
+        raw_version=raw_version,
+        cli_version=cli_version,
+        sdk_version=sdk_version,
+        authenticated=authenticated,
+        problem=problem,
+    )
+
+
+__all__ = ["VERIFIED_CLI_VERSION", "Capabilities", "parse_version", "probe"]

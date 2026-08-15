@@ -1,0 +1,71 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtuelle Umgebungen
+.venv/
+venv/
+ENV/
+env/
+.python-version
+
+# Test- und Werkzeug-Artefakte
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+.tox/
+.nox/
+.hypothesis/
+
+# Laufzeitdaten von ProtonSyncUI
+# Diese Dateien enthalten Pfade und Dateinamen aus den gesicherten Ordnern
+# und gehoeren niemals in ein Repository.
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+*.log
+logs/
+sync.db*
+
+# Editoren und Entwicklungsumgebungen
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.\#*
+\#*\#
+.claude/
+
+# Betriebssystem
+.DS_Store
+.directory
+Thumbs.db

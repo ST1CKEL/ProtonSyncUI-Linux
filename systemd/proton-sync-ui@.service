@@ -1,0 +1,39 @@
+# Referenzfassung des Template-Service.
+#
+# ProtonSyncUI schreibt diese Datei normalerweise selbst nach
+# ~/.config/systemd/user/ -- mit dem absoluten Pfad der tatsaechlich
+# installierten Kommandozeile (siehe systemd/units.py). Diese Fassung dient
+# zum Nachlesen und fuer eine manuelle Installation:
+#
+#   proton-sync-ui systemd sync
+#
+# %i ist die UUID des Sync-Paars:
+#
+#   systemctl --user enable --now proton-sync-ui@<UUID>.timer
+
+[Unit]
+Description=ProtonSyncUI -- Backup-Lauf fuer Sync-Paar %i
+Documentation=https://github.com/protonsyncui/proton-sync-ui#systemd-timer
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/proton-sync-ui sync %i
+
+# Backups sollen die interaktive Arbeit nicht ausbremsen.
+Nice=10
+IOSchedulingClass=idle
+CPUSchedulingPolicy=idle
+
+# Ein Lauf darf lange dauern (grosse Dateien, langsame Leitung).
+TimeoutStartSec=infinity
+
+NoNewPrivileges=yes
+
+# Erfolgreiche und teilweise erfolgreiche Laeufe (Code 1) gelten als
+# abgeschlossen; nur echte Fehler sollen die Unit als "failed" markieren.
+SuccessExitStatus=0 1
+
+# Bewusst KEIN ProtectHome/PrivateHome: Die Proton-Drive-CLI verwaltet ihre
+# Anmeldung im Benutzerverzeichnis und braucht den Sitzungsbus.
