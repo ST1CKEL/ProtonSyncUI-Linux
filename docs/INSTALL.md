@@ -9,8 +9,8 @@ Diese Anleitung beschreibt die Installation, Abhängigkeiten und Fehlerbehebung 
 Das mitgelieferte Installationsskript [`install.sh`](../install.sh) erkennt die verwendete Distribution, installiert bei Bedarf fehlende Systempakete und richtet die Anwendung isoliert im Benutzerverzeichnis (`~/.local`) ein.
 
 ```bash
-git clone https://github.com/protonsyncui/proton-sync-ui.git
-cd proton-sync-ui
+git clone git@github.com:ST1CKEL/ProtonSyncUI-Linux.git
+cd ProtonSyncUI-Linux
 chmod +x install.sh
 ./install.sh
 ```
