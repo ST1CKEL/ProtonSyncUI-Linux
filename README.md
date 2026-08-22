@@ -21,84 +21,110 @@
 
 ---
 
-## 🌟 Über das Projekt
+## 🌟 Highlights & Funktionen
 
-**ProtonSyncUI** ist ein eleganter, ressourcenschonender und sicherer Linux-Desktop-Client zur Synchronisation lokaler Ordner mit **Proton Drive**. 
-
-Die Anwendung verhält sich wie gewohnte Cloud-Sync-Clients (z. B. Nextcloud, Dropbox oder Google Drive) und bietet neben der grafischen libadwaita-Oberfläche eine vollständige **System-Tray-Integration (StatusNotifierItem)**, einen **Hintergrund-Betrieb** sowie automatische **systemd-Hintergrund-Timer**.
-
----
-
-## 📸 Screenshots & Benutzeroberfläche
-
-### 1. Übersicht (Hero-Statuskarte & Schnellstart)
-> Live-Status aller Sync-Paare, Schnellabgleich mit 1-Klick ("Alle synchronisieren") und Anzeige der letzten Synchronisationsläufe.
-
-![Übersicht](docs/screenshots/overview.png)
+- 🔄 **Echte 2-Wege-Synchronisation (Cloud ⇄ Lokal)**: Erkennt Änderungen auf beiden Seiten und gleicht sie nahtlos ab. Unterstützt zudem reine Upload- und Download-Modi.
+- 🎨 **Modernes GNOME / libadwaita Design**: Folgt den GNOME Human Interface Guidelines (HIG) mit adaptivem Layout (`Adw.NavigationSplitView`), Dark-Mode-Unterstützung und flüssigen Animationen.
+- 📥 **System-Tray & Hintergrund-Betrieb**: Läuft im Infobereich über das standardisierte `StatusNotifierItem` & `DBusMenu`-Protokoll (KDE, GNOME AppIndicator, XFCE, Sway/Waybar).
+- ⏱️ **systemd User-Timer**: Vollständig integrierte, native Hintergrundsynchronisation im Benutzerprofil (`systemd --user`) – zuverlässig, ressourcenschonend und ohne Root-Rechte.
+- ⚖️ **Visuelles Konflikt-Center**: Bei gleichzeitigen Änderungen schützt ProtonSyncUI deine Daten mit 1-Klick-Lösungsstrategien (*Beide behalten*, *Lokal bevorzugen*, *Cloud bevorzugen*).
+- 🛡️ **100% Zero-Knowledge & Datenschutz**: Keine Weitergabe von Passwörtern oder Tokens; die kryptografische Authentifizierung verbleibt vollständig bei der offiziellen `proton-drive` CLI. 0% Telemetrie.
+- ⚡ **Crash-Sicherheit & Atomarer Schutz**: Speicherung des Zustands in einer SQLite-Datenbank (Schema v2). Keine doppelten Übertragungen bei Verbindungsabbrüchen.
+- 🖥️ **Headless CLI**: Volle Steuerbarkeit auch auf Servern oder in Skripten ohne Desktop-Umgebung.
 
 ---
 
-### 2. Sync-Paare (Konfiguration & Verwaltung)
-> Detaillierte Boxed-Cards je Ordnerpaar mit Status-Badges, Schnellumschalter für automatische Läufe, Dry-Run-Simulation und Einzelfortschritt.
+## 📸 Benutzeroberfläche & Screenshots
 
-![Sync-Paare](docs/screenshots/pairs.png)
+### 1. Übersicht & Schnellzugriff (`Overview`)
+> Live-Status aller Sync-Paare, Hero-Statuskarte, Schnellabgleich mit 1-Klick ("Alle synchronisieren") und Anzeige der letzten Aktivitäten.
 
----
-
-### 3. Visuelles Konflikt-Center (2-Spalten-Gegenüberstellung)
-> Automatische Erkennung divergierender Dateistände mit 1-Klick-Lösungsstrategien (*Beide behalten*, *Lokal bevorzugen*, *Cloud bevorzugen*).
-
-![Konflikte](docs/screenshots/conflicts.png)
+<p align="center">
+  <img src="docs/screenshots/overview.png" alt="Übersicht & Schnellzugriff" width="90%">
+</p>
 
 ---
 
-### 4. Einstellungen & Autostart
-> System-Integration, Desktop-Benachrichtigungen, automatischer Start beim Anmelden (auch minimiert im Infobereich) und Live-CLI-Diagnose.
+### 2. Sync-Paare verwalten (`Sync Pairs`)
+> Übersichtliche Boxed-Cards je Ordnerpaar mit Status-Badges, Schnellumschaltern für automatische Läufe, Dry-Run-Simulation und Einzelfortschrittsanzeige.
 
-![Einstellungen](docs/screenshots/settings.png)
-
----
-
-### 5. Aktivitäts- und Historienverlauf
-> Lückenloser Verlauf aller Synchronisationen, geplante Übertragungen, Dateifehler und detaillierte Kennzahlen.
-
-![Aktivität](docs/screenshots/activity.png)
+<p align="center">
+  <img src="docs/screenshots/pairs.png" alt="Sync-Paare Verwaltung" width="90%">
+</p>
 
 ---
 
-## 📋 Systemanforderungen
+### 3. Visuelles Konflikt-Center (`Conflicts`)
+> Automatische Erkennung divergierender Dateistände mit übersichtlicher 2-Spalten-Gegenüberstellung und 1-Klick-Lösungsstrategien.
 
-ProtonSyncUI unterstützt alle modernen Linux-Distributionen (Wayland & X11).
+<p align="center">
+  <img src="docs/screenshots/conflicts.png" alt="Konflikt-Center" width="90%">
+</p>
 
-### Unterstützte Linux-Distributionen
+---
+
+### 4. Einstellungen & System-Integration (`Settings`)
+> Konfiguration von Desktop-Benachrichtigungen, Autostart beim Anmelden (auch minimiert im Infobereich) und Live-CLI-Diagnose.
+
+<p align="center">
+  <img src="docs/screenshots/settings.png" alt="Einstellungen" width="90%">
+</p>
+
+---
+
+### 5. Aktivitäts- & Historienverlauf (`Activity`)
+> Lückenloser Verlauf aller Synchronisationen, geplante Übertragungen, Dateifehler und detaillierte Kennzahlen (übertragene Datenmenge, Dauer).
+
+<p align="center">
+  <img src="docs/screenshots/activity.png" alt="Aktivitätsverlauf" width="90%">
+</p>
+
+---
+
+## 🏗️ Architektur & Funktionsweise
+
+ProtonSyncUI setzt auf eine strikte Schichtenarchitektur (Clean Architecture) mit robuster Trennung von Benutzeroberfläche, Synchronisationslogik und CLI-Infrastruktur:
+
+```mermaid
+graph TD
+    UI[GTK4 / libadwaita UI & Tray] -->|Ruft Services auf| SVC[Service Layer]
+    CLI[Headless CLI] -->|Ruft Services auf| SVC
+    SYSTEMD[systemd User-Timer] -->|Startet CLI-Lauf| CLI
+    
+    SVC --> ENGINE[2-Wege Sync Engine]
+    SVC --> REPO[(SQLite Repository v2)]
+    
+    ENGINE --> SCANNER[Paralleler Remote-Scanner]
+    ENGINE --> PLANNER[3-Wege Sync-Planer]
+    ENGINE --> ADAPTER[ProtonDrive CLI Adapter]
+    
+    ADAPTER -->|Subprocess Execution| PCLI[Offizielle proton-drive CLI]
+    PCLI -->|E2E-Verschlüsselt| CLOUD[Proton Drive Cloud]
+```
+
+### 3-Wege-Abgleich (Sync Matrix)
+Der Planer vergleicht den Zustand des lokalen Dateisystems, den Remote-Zustand auf Proton Drive und den in SQLite gespeicherten Stand des letzten erfolgreichen Laufs:
+
+| Lokaler Zustand | Cloud-Zustand | DB-Zustand (Letzter Sync) | Geplante Aktion |
+|---|---|---|---|
+| Neu angelegt | Nicht vorhanden | Nicht vorhanden | **Upload (Neu)** |
+| Nicht vorhanden | Neu angelegt | Nicht vorhanden | **Download (Neu)** |
+| Geändert | Unverändert | Gespeichert | **Upload (Aktualisierung)** |
+| Unverändert | Geändert | Gespeichert | **Download (Aktualisierung)** |
+| Geändert | Geändert | Gespeichert | ⚠️ **Konflikt erkannt (Archivierung / Lösungsdialog)** |
+| Gelöscht | Vorhanden | Gespeichert | **Lokal gelöscht** *(Remote-Kopie bleibt geschützt erhalten)* |
+| Unverändert | Unverändert | Gespeichert | **Überspringen (Identisch)** |
+
+---
+
+## 📋 Systemanforderungen & Distributionen
+
 | Distribution | Mindestversion | Paketmanager | Installationsbefehl für Abhängigkeiten |
 |---|---|---|---|
-| **Fedora / RHEL** | 39, 40, 41, 42, 43, 44 | `dnf` | `sudo dnf install python3-gobject gtk4 libadwaita python3-cairo librsvg2-tools` |
-| **Ubuntu / Debian** | Ubuntu 24.04+, Debian 12+ | `apt` | `sudo apt install python3-gi python3-gi-cairo gir1.2-gtk-4.0 gir1.2-adw-1 libadwaita-1-0 librsvg2-bin` |
-| **Arch Linux / Manjaro** | Rolling Release | `pacman` | `sudo pacman -S python-gobject gtk4 libadwaita python-cairo librsvg` |
-| **openSUSE** | Tumbleweed / Leap 15.6+ | `zypper` | `sudo zypper install python3-gobject gtk4 libadwaita-1-0 python3-cairo librsvg-tools` |
-
-*(Hinweis: Das mitgelieferte `install.sh`-Skript erkennt deine Distribution automatisch und installiert fehlende Systempakete selbstständig.)*
-
-### Software- und System-Voraussetzungen
-* **Python**: Version `3.10` oder neuer (vollständig kompatibel mit Python 3.11, 3.12, 3.13, 3.14).
-* **Desktop-Umgebung**: 
-  * **GNOME 45+** (Standard-Design via libadwaita)
-  * **KDE Plasma 5 / 6** (Native StatusNotifierItem-Tray-Unterstützung)
-  * **XFCE, Cinnamon, MATE, Cosmic, Hyprland, Sway**
-* **Proton Drive CLI**: `proton-drive` Kommandozeile (installiert im Benutzerpfad, z. B. via `pip` oder `pipx`).
-* **Hintergrunddienste**:
-  * `systemd --user` für zeitgesteuerte Hintergrund-Synchronisation.
-  * D-Bus Session-Bus für das Infobereich-/Taskleisten-Symbol (`StatusNotifierItem` & `DBusMenu`).
-
----
-
-## 🛡️ Sicherheitsmodell & Datenschutz
-
-* **🔒 100% Zero-Knowledge & Datenschutz**: ProtonSyncUI speichert **keine Passwörter, Sitzungstokens oder Zugangsdaten**. Die kryptografische Authentifizierung verbleibt vollständig bei der offiziellen `proton-drive` CLI.
-* **🛡️ Schutz vor Datenverlust**: Bei Uploads wird standardmäßig `-f create-new-revision` und `-d merge` genutzt. Bestehende Cloud-Dateien werden niemals versehentlich überschrieben oder remote gelöscht.
-* **⚡ Crash-Sicherheit**: Jede übertragene Datei wird atomar in einer lokalen SQLite-Datenbank festgehalten. Bei Abbrüchen (z. B. Systemneustart oder Verbindungsverlust) wird die Synchronisation nahtlos und ohne doppelte Übertragungen fortgesetzt.
-* **🚫 0% Telemetrie**: Keine Tracking-Tools, keine Analyse-Server, kein Web-Port – 100% lokale Ausführung.
+| **Fedora / RHEL** | 39, 40, 41, 42, 43, 44 | `dnf` | `sudo dnf install -y python3-gobject gtk4 libadwaita python3-cairo librsvg2-tools` |
+| **Ubuntu / Debian** | Ubuntu 24.04+, Debian 12+ | `apt` | `sudo apt install -y python3-gi python3-gi-cairo gir1.2-gtk-4.0 gir1.2-adw-1 libadwaita-1-0 librsvg2-bin` |
+| **Arch Linux / Manjaro** | Rolling Release | `pacman` | `sudo pacman -S --needed python-gobject gtk4 libadwaita python-cairo librsvg` |
+| **openSUSE** | Tumbleweed / Leap 15.6+ | `zypper` | `sudo zypper install -y python3-gobject gtk4 libadwaita-1-0 python3-cairo librsvg-tools` |
 
 ---
 
@@ -106,7 +132,7 @@ ProtonSyncUI unterstützt alle modernen Linux-Distributionen (Wayland & X11).
 
 ### 1. Repository klonen
 ```bash
-git clone git@github.com:ST1CKEL/ProtonSyncUI-Linux.git
+git clone https://github.com/ST1CKEL/ProtonSyncUI-Linux.git
 cd ProtonSyncUI-Linux
 ```
 
@@ -116,129 +142,82 @@ chmod +x install.sh
 ./install.sh
 ```
 
-> **Automatisierte Installation (z. B. ohne interaktive Rückfragen):**
-> ```bash
-> ./install.sh -y
-> ```
+*(Für automatisierte/nicht-interaktive Installationen: `./install.sh -y`)*
 
-### 3. Einmalig bei Proton Drive anmelden (falls noch nicht erfolgt)
+### 3. Bei Proton Drive anmelden (falls noch nicht erfolgt)
 ```bash
 proton-drive auth login
 ```
 
-### 4. ProtonSyncUI starten
-* Über das **Startmenü / Anwendungsübersicht**: Nach `ProtonSyncUI` suchen.
-* Über das **Terminal (GUI)**:
+### 4. Anwendung starten
+* **Über die Anwendungsübersicht**: Nach `ProtonSyncUI` suchen.
+* **Über das Terminal**:
   ```bash
   proton-sync-ui-gui
   ```
-* Im **Hintergrund minimiert starten**:
+* **Minimiert im Infobereich starten**:
   ```bash
   proton-sync-ui-gui --minimized
   ```
-* Über das **Terminal (CLI Statusabfrage)**:
-  ```bash
-  proton-sync-ui status
-  ```
 
 ---
 
-## 💡 System-Tray & Hintergrund-Betrieb
+## ⌨️ CLI-Befehlsreferenz (Headless-Betrieb)
 
-* **Minimieren ins Tray**: Beim Klick auf das Schließen-Kreuz (`X`) schließt sich das Fenster nicht komplett, sondern minimiert sich lautlos in die Taskleiste.
-* **Kontextmenü in der Leiste**:
-  * *ProtonSyncUI öffnen*
-  * *Alle jetzt synchronisieren*
-  * *Beenden* (`Strg+Q`)
-* **Autostart**: In den *Einstellungen* kann der automatische Start beim System-Login (wahlweise direkt minimiert) mit einem Klick aktiviert werden.
-
-> **💡 Hinweis für GNOME-Nutzer (Fedora / Ubuntu):**  
-> GNOME blendet System-Tray-Icons standardmäßig aus. Um das Icon in der oberen Leiste anzuzeigen, installiere die Standard-Erweiterung:
-> ```bash
-> # Fedora:
-> sudo dnf install gnome-shell-extension-appindicator
-> # Ubuntu / Debian:
-> sudo apt install gnome-shell-extension-appindicator
-> ```
-
----
-
-## ⌨️ CLI-Befehlsreferenz
-
-ProtonSyncUI lässt sich auch vollständig ohne grafische Oberfläche auf Servern oder in Skripten steuern:
+ProtonSyncUI lässt sich auch auf Servern oder in eigenen Skripten steuern:
 
 ```bash
-# Status aller konfigurierten Sync-Paare anzeigen
+# Status aller Paare anzeigen
 proton-sync-ui status
 
-# Bestimmtes Sync-Paar synchronisieren
+# Synchronisation für ein Paar starten
 proton-sync-ui run <PAIR-UID-ODER-NAME>
 
-# Dry-Run (Vorschau / Simulation) ausführen
+# Dry-Run (Simulation) ohne Änderungen
 proton-sync-ui dry-run <PAIR-UID-ODER-NAME>
 
-# Alle Paare tabellarisch auflisten
+# Alle konfigurierten Paare auflisten
 proton-sync-ui list
 
-# systemd Timer im Benutzerprofil aktualisieren
+# systemd Timer aktualisieren
 proton-sync-ui systemd sync
 
-# Protokolldatei einsehen
+# Aktuelle Protokolldatei einsehen
 proton-sync-ui logs
 ```
 
 ---
 
-## 🏗️ Projektstruktur
+## 📚 Ausführliche Dokumentation
 
-```
-ProtonSyncUI-Linux/
-├── data/                                 # Desktop-Metadaten & Vektor-Symbole
-│   ├── icons/io.github.protonsyncui.ProtonSyncUI.svg
-│   └── io.github.protonsyncui.ProtonSyncUI.desktop
-├── docs/                                 # Detaillierte Dokumentation & Screenshots
-│   ├── ARCHITECTURE.md                   # Architektur, Clean Design & Datenfluss
-│   ├── INSTALL.md                        # Distributions-spezifische Installationsanleitung
-│   └── screenshots/                      # UI-Screenshots (Overview, Pairs, Conflicts, etc.)
-├── src/proton_sync_ui/                   # Python-Quellpaket
-│   ├── cli/                              # Headless CLI-Kommandos
-│   ├── cli_adapter/                      # Sicherer Subprocess-Adapter für proton-drive
-│   ├── models/                           # Datamodels (SyncPair, RunRecord, UploadPlan)
-│   ├── services/                         # Service-Layer (Contracts, DefaultServices)
-│   ├── storage/                          # SQLite Schema & Repository (v2)
-│   ├── sync/                             # 2-Wege Sync Engine, Paralleler Scanner & Planer
-│   ├── systemd/                          # systemd User-Timer & Service-Manager
-│   └── ui/                               # GTK4 / libadwaita Desktop-App
-│       ├── components/                   # StatusBadge, PairCardRow, ConflictCard
-│       ├── views/                        # Overview, Pairs, Conflicts, Activity, Settings, Diag
-│       ├── application.py                # Adw.Application Lebenszyklus & CLI-Optionen
-│       ├── tray.py                       # StatusNotifierItem & DBusMenu Taskleisten-Dienst
-│       └── window.py                     # Adw.NavigationSplitView Hauptfenster
-├── tests/                                # 406 Unittests & UI Smoke Tests
-├── install.sh                            # Multi-Distro Installer (Fedora, Debian, Arch, SUSE)
-├── uninstall.sh                          # Sauberer Deinstaller
-└── pyproject.toml                        # Build- & Abhängigkeitskonfiguration
-```
+Weitere detaillierte Anleitungen und technische Referenzen findest du im Ordner [`docs/`](docs/):
+
+* 📖 **[Benutzerhandbuch (User Guide)](docs/USER_GUIDE.md)** – Vollständige Anleitung zur Konfiguration, Konfliktlösung und Benutzeroberfläche.
+* 🏛️ **[Architektur & Design](docs/ARCHITECTURE.md)** – Tiefgehende Systemdokumentation, Schichtenmodell, SQLite Schema und Scanner-Pipeline.
+* 📦 **[Installationsanleitung](docs/INSTALL.md)** – Detaillierte Anleitung für alle Linux-Distributionen & manuelle Einrichtung.
+* 💻 **[CLI-Referenz](docs/CLI_REFERENCE.md)** – Headless-Nutzung, Scripting, Exit-Codes und Automatisierung.
+* 🔧 **[Fehlerbehebung (Troubleshooting)](docs/TROUBLESHOOTING.md)** – Diagnoseleitfaden für Schlüsselbunde, Berechtigungen und Logs.
+* ⏱️ **[systemd Integration](systemd/README-systemd.md)** – Funktionsweise der User-Units und Hintergrund-Timer.
 
 ---
 
 ## 🛠️ Entwicklung & Tests
 
 ```bash
-# Entwicklerumgebung installieren
+# Entwicklerumgebung einrichten
 ./install.sh --dev
 
 # Virtuelle Umgebung aktivieren
 source ~/.local/share/proton-sync-ui/venv/bin/activate
 
 # Testsuite ausführen (406 Tests)
-pytest
+PYTHONPATH=src pytest
 
 # Code-Qualität & Formatierung prüfen
 ruff check .
 ruff format --check .
 
-# Statische Typprüfung
+# Typanalyse
 mypy
 ```
 
@@ -247,10 +226,10 @@ mypy
 ## 🗑️ Deinstallation
 
 ```bash
-# Standard-Entfernung (Konfiguration & Datenbank bleiben erhalten)
+# Standard-Deinstallation (Konfiguration und Datenbank bleiben erhalten)
 ./uninstall.sh
 
-# Vollständige Bereinigung inklusive lokaler Datenbank und Logs
+# Vollständige Bereinigung (inklusive lokaler Datenbank und Logs)
 ./uninstall.sh --purge
 ```
 
@@ -258,4 +237,4 @@ mypy
 
 ## 📄 Lizenz
 
-Dieses Projekt ist unter der **MIT-Lizenz** lizenziert. Siehe [LICENSE](LICENSE) für Details.
+Dieses Projekt ist unter der **MIT-Lizenz** lizenziert. Siehe [LICENSE](LICENSE) für weitere Details.
