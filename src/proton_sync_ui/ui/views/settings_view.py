@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -14,6 +15,8 @@ from gi.repository import Adw, Gtk  # noqa: E402
 from ... import APP_ID, APP_TITLE  # noqa: E402
 from ...cli_adapter.adapter import ProtonDriveAdapter  # noqa: E402
 from ...cli_adapter.capabilities import probe  # noqa: E402
+from ...paths import find_gui_executable  # noqa: E402
+from ...systemd.manager import SystemdManager  # noqa: E402
 
 if TYPE_CHECKING:
     from ..window import MainWindow
@@ -153,6 +156,7 @@ class SettingsView(Gtk.Box):
         if not enabled:
             if autostart_file.exists():
                 autostart_file.unlink(missing_ok=True)
+                self._reload_systemd()
                 self._window.toast("Autostart deaktiviert.")
             return
 
@@ -160,7 +164,8 @@ class SettingsView(Gtk.Box):
         desktop_src = Path.home() / ".local" / "share" / "applications" / f"{APP_ID}.desktop"
         content = desktop_src.read_text(encoding="utf-8") if desktop_src.exists() else ""
 
-        exec_cmd = "Exec=proton-sync-ui-gui --minimized" if minimized else "Exec=proton-sync-ui-gui"
+        gui_bin = find_gui_executable()
+        exec_cmd = f"Exec={gui_bin} --minimized" if minimized else f"Exec={gui_bin}"
         if content:
             lines = [
                 exec_cmd if line.startswith("Exec=") else line for line in content.splitlines()
@@ -173,8 +178,15 @@ class SettingsView(Gtk.Box):
             )
             autostart_file.write_text(fallback, encoding="utf-8")
 
+        self._reload_systemd()
         mode = " (minimiert)" if minimized else ""
         self._window.toast(f"Autostart{mode} aktiviert.")
+
+    @staticmethod
+    def _reload_systemd() -> None:
+        """Informiert systemd ueber Aenderungen im Autostart-Verzeichnis."""
+        with contextlib.suppress(Exception):
+            SystemdManager().daemon_reload()
 
     def check_cli(self) -> None:
         async def _check() -> None:

@@ -230,6 +230,13 @@ PY
 ok "Symbole in 16px, 22px, 24px, 32px, 48px, 64px, 128px, 256px und 512px eingerichtet"
 
 install -m 644 "$PROJECT_DIR/data/$APP_ID.desktop" "$APPS_DIR/$APP_ID.desktop"
+sed -i "s|^Exec=proton-sync-ui-gui|Exec=$BIN_DIR/proton-sync-ui-gui|" "$APPS_DIR/$APP_ID.desktop"
+
+# Bestehenden Autostart-Eintrag bei Bedarf ebenfalls auf den absoluten Pfad aktualisieren
+AUTOSTART_FILE="${XDG_CONFIG_HOME:-$HOME/.config}/autostart/$APP_ID.desktop"
+if [[ -f "$AUTOSTART_FILE" ]]; then
+    sed -i "s|^Exec=proton-sync-ui-gui|Exec=$BIN_DIR/proton-sync-ui-gui|" "$AUTOSTART_FILE"
+fi
 ok "$APPS_DIR/$APP_ID.desktop"
 
 if command -v desktop-file-validate >/dev/null 2>&1; then
@@ -253,6 +260,8 @@ if command -v kbuildsycoca6 >/dev/null 2>&1; then
 elif command -v kbuildsycoca5 >/dev/null 2>&1; then
     kbuildsycoca5 --noincremental >/dev/null 2>&1 && ok "kbuildsycoca5 (KDE-Menue)"
 fi
+
+command -v systemctl >/dev/null 2>&1 && systemctl --user daemon-reload 2>/dev/null && ok "systemctl --user daemon-reload"
 
 # ---------------------------------------------------------------------------
 # 7. Abschlussmeldung

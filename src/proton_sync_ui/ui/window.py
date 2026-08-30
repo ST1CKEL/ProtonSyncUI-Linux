@@ -332,7 +332,7 @@ class MainWindow(Adw.ApplicationWindow):
         if pair is not None:
             row = self.view_pairs.get_row(pair.uid)
             if row is not None:
-                row.update_status(record, is_running=False)
+                row.update_run(record, running=False)
 
         if record.dry_run and pair is not None:
             self._show_dry_run_preview(pair, record, plan)

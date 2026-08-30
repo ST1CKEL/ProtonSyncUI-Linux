@@ -63,7 +63,7 @@ if [[ -d "$VENV_DIR" ]]; then
     ok "Laufzeitumgebung geloescht"
 fi
 
-for path in "$APPS_DIR/$APP_ID.desktop" "$ICON_DIR/$APP_ID.svg"; do
+for path in "$APPS_DIR/$APP_ID.desktop" "$ICON_DIR/$APP_ID.svg" "$CONFIG_HOME/autostart/$APP_ID.desktop"; do
     if [[ -e "$path" ]]; then
         rm -f "$path"
         ok "$path"

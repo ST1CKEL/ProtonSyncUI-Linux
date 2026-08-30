@@ -13,12 +13,10 @@ testbar.
 from __future__ import annotations
 
 import re
-import shutil
-import sys
-from pathlib import Path
 from typing import Final
 
 from ..models.sync_pair import SyncPair
+from ..paths import find_cli_executable
 
 #: Name des Template-Service. Instanzen heissen proton-sync-ui@<uuid>.service.
 SERVICE_TEMPLATE_NAME: Final = "proton-sync-ui@.service"
@@ -64,17 +62,7 @@ def find_executable() -> str:
     deshalb wird der Pfad fest in die Unit geschrieben. Bei einer Installation
     in einer virtuellen Umgebung ist das ohnehin der einzige verlaessliche Weg.
     """
-    found = shutil.which("proton-sync-ui")
-    if found:
-        return found
-
-    # Fallback: neben dem laufenden Interpreter (venv-Installation).
-    candidate = Path(sys.executable).parent / "proton-sync-ui"
-    if candidate.is_file():
-        return str(candidate)
-
-    # Letzter Ausweg: als Modul starten.
-    return f"{sys.executable} -m proton_sync_ui"
+    return find_cli_executable()
 
 
 def service_template_text(*, executable: str | None = None) -> str:

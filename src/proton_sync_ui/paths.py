@@ -8,6 +8,8 @@ Import zwischengespeicherter Pfad wuerde diese Isolation aushebeln.
 from __future__ import annotations
 
 import os
+import shutil
+import sys
 from datetime import datetime
 from pathlib import Path
 
@@ -91,11 +93,62 @@ def log_file_path() -> Path:
     return log_file()
 
 
+def find_gui_executable() -> str:
+    """Ermittelt den absoluten Pfad der GUI-Kommandozeile (proton-sync-ui-gui).
+
+    Fuer Desktop-Autostart und systemd muss zwingend ein absoluter Pfad verwendet
+    werden, da systemd-xdg-autostart-generator und Login-Sessions ohne die
+    PATH-Erweiterungen interaktiver Shells arbeiten.
+    """
+    local_bin = Path.home() / ".local" / "bin" / "proton-sync-ui-gui"
+    if local_bin.is_file():
+        return str(local_bin)
+
+    found = shutil.which("proton-sync-ui-gui")
+    if found and Path(found).is_absolute():
+        return found
+
+    candidate = Path(sys.executable).parent / "proton-sync-ui-gui"
+    if candidate.is_file():
+        return str(candidate)
+
+    data_home = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share"))
+    venv_candidate = data_home / "proton-sync-ui" / "venv" / "bin" / "proton-sync-ui-gui"
+    if venv_candidate.is_file():
+        return str(venv_candidate)
+
+    return f"{sys.executable} -m proton_sync_ui.ui.application"
+
+
+def find_cli_executable() -> str:
+    """Ermittelt den absoluten Pfad der CLI-Kommandozeile (proton-sync-ui)."""
+    local_bin = Path.home() / ".local" / "bin" / "proton-sync-ui"
+    if local_bin.is_file():
+        return str(local_bin)
+
+    found = shutil.which("proton-sync-ui")
+    if found and Path(found).is_absolute():
+        return found
+
+    candidate = Path(sys.executable).parent / "proton-sync-ui"
+    if candidate.is_file():
+        return str(candidate)
+
+    data_home = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share"))
+    venv_candidate = data_home / "proton-sync-ui" / "venv" / "bin" / "proton-sync-ui"
+    if venv_candidate.is_file():
+        return str(venv_candidate)
+
+    return f"{sys.executable} -m proton_sync_ui"
+
+
 __all__ = [
     "config_dir",
     "data_dir",
     "database_path",
     "ensure_directories",
+    "find_cli_executable",
+    "find_gui_executable",
     "format_size",
     "format_timestamp",
     "log_dir",

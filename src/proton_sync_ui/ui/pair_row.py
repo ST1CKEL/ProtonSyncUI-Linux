@@ -254,6 +254,8 @@ class PairRow(Adw.ExpanderRow):
             parts.append(f"{record.local_deletions} lokal geloescht (Proton Drive unveraendert)")
         self._counts_row.set_subtitle(" · ".join(parts))
 
+    update_status = update_run
+
     def update_progress(self, progress: SyncProgress) -> None:
         """Aktualisiert den Fortschrittsbalken waehrend eines Laufs."""
         self._progress_row.set_visible(True)
