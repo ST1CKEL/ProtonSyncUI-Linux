@@ -202,9 +202,14 @@ class FakeAdapter:
         )
         name = remote_path.rsplit("/", 1)[-1]
         target = local_parent / name
+        # Wie die echte CLI mit "-f skip": eine vorhandene Datei bleibt stehen.
         if not target.exists():
             target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_text("downloaded content", encoding="utf-8")
+            size = self.existing_files.get(remote_path.rstrip("/"))
+            if size is None:
+                target.write_text("downloaded content", encoding="utf-8")
+            else:
+                target.write_bytes(b"d" * size)
         self.downloads.append(DownloadCall(remote_path=remote_path, local_parent=local_parent))
         return CommandResult(
             argv=("filesystem", "download"),

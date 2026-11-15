@@ -219,14 +219,23 @@ class AsyncRunner:
             finally:
                 repository.close()
 
+        def forget_job() -> None:
+            with self._lock:
+                if self._jobs.get(pair_uid) is handle:
+                    self._jobs.pop(pair_uid, None)
+
         def schedule() -> None:
+            if future.cancelled():
+                # Vor dem Start abgebrochen: gar nicht erst loslaufen.
+                forget_job()
+                idle_call(on_error, asyncio.CancelledError())
+                return
             task = loop.create_task(job())
             handle._task = task
 
             def finished(completed: asyncio.Task[tuple[RunRecord, UploadPlan]]) -> None:
-                with self._lock:
-                    self._jobs.pop(pair_uid, None)
-                if completed.cancelled():
+                forget_job()
+                if completed.cancelled() or future.cancelled():
                     future.cancel()
                     idle_call(on_error, asyncio.CancelledError())
                     return

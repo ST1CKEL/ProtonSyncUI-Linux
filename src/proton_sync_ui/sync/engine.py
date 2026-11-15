@@ -13,12 +13,15 @@ Ablauf eines Durchgangs:
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import functools
+import shutil
+import tempfile
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from enum import StrEnum
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Final
 
 from ..cli_adapter import capabilities
@@ -31,7 +34,7 @@ from ..models.run import FileError, RunRecord, RunStatus
 from ..models.sync_pair import KNOWN_REMOTE_SECTIONS, SyncMode, SyncPair
 from ..storage.locking import run_lock
 from ..storage.repository import Repository
-from .ignore import IgnoreMatcher
+from .ignore import DOWNLOAD_STAGING_PREFIX, IgnoreMatcher
 from .planner import build_plan
 from .remote_scanner import scan_remote_directory
 from .retry import RetryPolicy, retry_async
@@ -168,6 +171,9 @@ class SyncEngine:
 
             try:
                 plan = await self._build_plan(pair)
+            except asyncio.CancelledError:
+                self._finish_cancelled(pair, record)
+                raise
             except Exception as error:
                 message = f"Fehler bei der Planerstellung: {error}"
                 record.fail(message)
@@ -211,16 +217,20 @@ class SyncEngine:
 
             try:
                 await self._transfer(pair, plan, record)
+                self._apply_local_deletions(pair, plan)
+                self._refresh_unchanged(pair, plan)
             except asyncio.CancelledError:
-                record.status = RunStatus.CANCELLED
-                record.message = "Der Lauf wurde abgebrochen."
-                record.finish()
-                self._repository.finish_run(record)
-                log.warning("Lauf abgebrochen.", extra={"pair_uid": pair.uid, "run_id": run_id})
+                self._finish_cancelled(pair, record)
                 raise
-
-            self._apply_local_deletions(pair, plan)
-            self._refresh_unchanged(pair, plan)
+            except Exception as error:
+                # Unerwartet (z. B. Datenbankfehler): den Lauf nicht als
+                # "laeuft" haengen lassen.
+                message = f"Unerwarteter Fehler waehrend der Uebertragung: {error}"
+                record.fail(message)
+                with contextlib.suppress(Exception):
+                    self._repository.finish_run(record)
+                log.exception(message, extra={"pair_uid": pair.uid, "run_id": run_id})
+                return record, plan
 
             record.finish(message=plan.describe())
             self._repository.finish_run(record)
@@ -244,6 +254,17 @@ class SyncEngine:
                 extra={"pair_uid": pair.uid, "run_id": run_id},
             )
             return record, plan
+
+    def _finish_cancelled(self, pair: SyncPair, record: RunRecord) -> None:
+        """Schliesst einen abgebrochenen Lauf in der Historie ab."""
+        record.status = RunStatus.CANCELLED
+        record.message = "Der Lauf wurde abgebrochen."
+        record.finish()
+        try:
+            self._repository.finish_run(record)
+        except Exception:
+            log.exception("Abgebrochener Lauf konnte nicht protokolliert werden.")
+        log.warning("Lauf abgebrochen.", extra={"pair_uid": pair.uid, "run_id": record.run_id})
 
     async def _preflight(self) -> str:
         """Prueft die CLI. Gibt eine leere Zeichenkette zurueck, wenn alles passt."""
@@ -355,21 +376,6 @@ class SyncEngine:
                         message=f"Download: {relative.as_posix()}",
                     )
                 )
-
-                if item.action == PlanAction.CONFLICT_LOCAL_RENAMED and local_file.is_file():
-                    # Lokale Datei sicher umbenennen
-                    stamp = int(time.time())
-                    conflict_name = f"{local_file.stem}.conflict-{stamp}{local_file.suffix}"
-                    conflict_file = local_file.with_name(conflict_name)
-                    try:
-                        local_file.rename(conflict_file)
-                        log.warning(
-                            "Konflikt: Lokale Datei umbenannt in %s",
-                            conflict_file.name,
-                            extra={"pair_uid": pair.uid},
-                        )
-                    except OSError as err:
-                        log.error("Konnte Konfliktdatei nicht umbenennen: %s", err)
 
                 error = await self._download_one(
                     pair, item=item, local_file=local_file, remote_path=remote_path
@@ -512,7 +518,14 @@ class SyncEngine:
         local_file: Path,
         remote_path: str,
     ) -> FileError | None:
-        """Laedt eine Datei von Proton Drive in das lokale Dateisystem herunter."""
+        """Laedt eine Datei von Proton Drive herunter und ersetzt die lokale Fassung.
+
+        Die CLI laedt zunaechst in ein verstecktes Staging-Verzeichnis neben dem
+        Ziel. Erst wenn der Download vollstaendig ist, wird bei einem Konflikt
+        die lokale Fassung gesichert und die neue Datei atomar an ihren Platz
+        gesetzt. Ein abgebrochener oder fehlgeschlagener Download laesst die
+        lokale Datei damit unberuehrt.
+        """
         attempts = 1
 
         def note_retry(attempt: int, delay: float, error: BaseException) -> None:
@@ -532,15 +545,66 @@ class SyncEngine:
                 },
             )
 
-        try:
-            local_parent = local_file.parent
-            local_parent.mkdir(parents=True, exist_ok=True)
-
-            await retry_async(
-                functools.partial(self._adapter.download_file, remote_path, local_parent),
-                policy=self._retry_policy,
-                on_retry=note_retry,
+        def local_error(error: OSError, what: str) -> FileError:
+            return FileError(
+                relative_path=item.posix_path,
+                message=f"{what}: {error.strerror or error}",
+                attempts=attempts,
+                permanent=True,
             )
+
+        try:
+            local_file.parent.mkdir(parents=True, exist_ok=True)
+            staging = Path(tempfile.mkdtemp(prefix=DOWNLOAD_STAGING_PREFIX, dir=local_file.parent))
+        except OSError as error:
+            return local_error(error, "Lokaler Schreibfehler")
+
+        async def attempt_download() -> None:
+            # Reste eines fehlgeschlagenen Versuchs entfernen, sonst wuerde die
+            # CLI eine halbe Datei als "vorhanden" ueberspringen.
+            for leftover in staging.iterdir():
+                if leftover.is_dir() and not leftover.is_symlink():
+                    shutil.rmtree(leftover, ignore_errors=True)
+                else:
+                    leftover.unlink(missing_ok=True)
+            await self._adapter.download_file(remote_path, staging)
+
+        try:
+            await retry_async(attempt_download, policy=self._retry_policy, on_retry=note_retry)
+
+            downloaded = staging / PurePosixPath(remote_path).name
+            if not downloaded.is_file():
+                return FileError(
+                    relative_path=item.posix_path,
+                    message="Die CLI hat den Download gemeldet, aber keine Datei geliefert.",
+                    attempts=attempts,
+                    permanent=False,
+                )
+
+            # Bei DOWNLOAD_NEW gab es beim Scan keine lokale Datei; ist jetzt
+            # eine da, wurde sie zwischenzeitlich angelegt und wird ebenfalls
+            # gesichert statt ueberschrieben.
+            backup_local = item.action in (
+                PlanAction.CONFLICT_LOCAL_RENAMED,
+                PlanAction.DOWNLOAD_NEW,
+            )
+            if backup_local and local_file.exists():
+                conflict_file = conflict_path_for(local_file)
+                try:
+                    local_file.rename(conflict_file)
+                except OSError as error:
+                    # Ohne Sicherung wird nichts ueberschrieben.
+                    return local_error(error, "Lokale Fassung konnte nicht gesichert werden")
+                log.warning(
+                    "Konflikt: Lokale Fassung gesichert als %s",
+                    conflict_file.name,
+                    extra={"pair_uid": pair.uid, "relative_path": item.posix_path},
+                )
+
+            try:
+                downloaded.replace(local_file)
+            except OSError as error:
+                return local_error(error, "Lokaler Schreibfehler")
         except asyncio.CancelledError:
             raise
         except ProtonCliError as error:
@@ -551,12 +615,9 @@ class SyncEngine:
                 permanent=not error.transient,
             )
         except OSError as error:
-            return FileError(
-                relative_path=item.posix_path,
-                message=f"Lokaler Schreibfehler: {error.strerror or error}",
-                attempts=attempts,
-                permanent=True,
-            )
+            return local_error(error, "Lokaler Schreibfehler")
+        finally:
+            shutil.rmtree(staging, ignore_errors=True)
         return None
 
     async def _upload_one(
@@ -668,17 +729,41 @@ class SyncEngine:
             )
 
     def _apply_local_deletions(self, pair: SyncPair, plan: UploadPlan) -> None:
-        """Entfernt Zustandseintraege verschwundener Dateien."""
-        deletions = [item.posix_path for item in plan.local_deletions]
-        if deletions:
-            self._repository.forget_file_states(pair.uid, deletions)
+        """Pflegt die Zustaende lokal geloeschter Dateien.
+
+        Besteht die Cloud-Kopie weiter, bleibt der Eintrag als Grabstein
+        erhalten -- sonst wuerde der naechste Lauf die Datei erneut
+        herunterladen. Ist die Datei auf beiden Seiten verschwunden, wird der
+        Eintrag verworfen.
+        """
+        tombstones = [item.posix_path for item in plan.local_deletions if item.keep_tombstone]
+        forget = [item.posix_path for item in plan.local_deletions if not item.keep_tombstone]
+        if tombstones:
+            self._repository.mark_deleted(pair.uid, tombstones)
+        if forget:
+            self._repository.forget_file_states(pair.uid, forget)
 
     def _refresh_unchanged(self, pair: SyncPair, plan: UploadPlan) -> None:
-        """Schreibt neue mtimes fuer inhaltsgleiche Dateien fort."""
+        """Pflegt den Zustand unveraenderter Dateien nach."""
         for item in plan.items:
+            if item.record_initial_state:
+                self._repository.record_download(
+                    pair.uid,
+                    relative_path=item.posix_path,
+                    size_bytes=item.size_bytes,
+                    mtime_ns=item.mtime_ns,
+                    remote_path=item.remote_path or pair.remote_path_for(item.relative_path),
+                    sha256=item.sha256,
+                    remote_mtime=item.remote_mtime or None,
+                )
+                continue
             if item.needs_mtime_refresh:
                 self._repository.touch_file_state(
                     pair.uid, relative_path=item.posix_path, mtime_ns=item.mtime_ns
+                )
+            if item.needs_remote_mtime_refresh and item.remote_mtime:
+                self._repository.set_remote_mtime(
+                    pair.uid, relative_path=item.posix_path, remote_mtime=item.remote_mtime
                 )
 
     def _emit(self, progress: SyncProgress) -> None:
@@ -691,11 +776,27 @@ class SyncEngine:
             log.exception("Fortschrittsmeldung fehlgeschlagen.")
 
 
+def conflict_path_for(local_file: Path) -> Path:
+    """Freier Name fuer die Sicherung der lokalen Fassung bei einem Konflikt.
+
+    Format: ``<stem>.conflict-<unix-zeit><suffix>``. Ist der Name vergeben,
+    wird die Zeitangabe hochgezaehlt, damit keine fruehere Sicherung
+    ueberschrieben wird.
+    """
+    stamp = int(time.time())
+    while True:
+        candidate = local_file.with_name(f"{local_file.stem}.conflict-{stamp}{local_file.suffix}")
+        if not candidate.exists():
+            return candidate
+        stamp += 1
+
+
 __all__ = [
     "RUN_HISTORY_LIMIT",
     "ProgressCallback",
     "SyncEngine",
     "SyncPhase",
     "SyncProgress",
+    "conflict_path_for",
     "phase_label",
 ]

@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
+from typing import Final
 
 from ..logging_setup import get_logger
 from ..models.plan import UploadPlan
@@ -14,6 +16,26 @@ from ..ui.runner import AsyncRunner, DoneHandler, ErrorHandler, ProgressHandler
 from .contracts import ConflictItem
 
 log = get_logger("services.default")
+
+#: Name einer Konfliktsicherung, wie sie ``sync.engine.conflict_path_for``
+#: erzeugt: ``<stem>.conflict-<unix-zeit><suffix>``. Nur genau dieses Format
+#: gilt als Konflikt -- normale Dateien wie ``notes.conflict-ideen.txt``
+#: werden nie angefasst.
+_CONFLICT_NAME_RE: Final = re.compile(
+    r"^(?P<stem>.+)\.conflict-(?P<stamp>[0-9]{10,})(?P<suffix>\.[^.]+)?$"
+)
+
+
+def _free_copy_path(orig_file: Path) -> Path:
+    """Freier Name ``<stem> (Lokale Kopie[ n])<suffix>`` neben ``orig_file``."""
+    candidate = orig_file.with_name(f"{orig_file.stem} (Lokale Kopie){orig_file.suffix}")
+    counter = 2
+    while candidate.exists():
+        candidate = orig_file.with_name(
+            f"{orig_file.stem} (Lokale Kopie {counter}){orig_file.suffix}"
+        )
+        counter += 1
+    return candidate
 
 
 class DefaultPairRepository:
@@ -69,17 +91,10 @@ class DefaultConflictService:
             for conflict_file in pair.local_path.rglob("*.conflict-*"):
                 if not conflict_file.is_file():
                     continue
-                # Ermittle urspruenglichen Namen
-                parent = conflict_file.parent
-                name = conflict_file.name
-                # Format: name.conflict-12345.ext oder name.conflict-12345
-                parts = name.split(".conflict-")
-                if len(parts) == 2:
-                    stem = parts[0]
-                    rest = parts[1]
-                    ext = f".{rest.split('.', 1)[1]}" if "." in rest else ""
-                    orig_name = f"{stem}{ext}"
-                    orig_file = parent / orig_name
+                match = _CONFLICT_NAME_RE.match(conflict_file.name)
+                if match is not None:
+                    orig_name = f"{match['stem']}{match['suffix'] or ''}"
+                    orig_file = conflict_file.parent / orig_name
                     rel_path = orig_file.relative_to(pair.local_path).as_posix()
 
                     local_size = conflict_file.stat().st_size
@@ -124,11 +139,11 @@ class DefaultConflictService:
             conflict_path.unlink(missing_ok=True)
             log.info("Konflikt geloest: Cloud-Fassung beibehalten (%s)", conflict.relative_path)
         elif resolution == "keep_both":
-            # Lokale Fassung wird dauerhaft sauber umbenannt
-            clean_name = f"{orig_file.stem} (Lokale Kopie){orig_file.suffix}"
-            clean_path = orig_file.with_name(clean_name)
-            conflict_path.replace(clean_path)
-            log.info("Konflikt geloest: Beide Dateien beibehalten (%s)", clean_name)
+            # Lokale Fassung wird dauerhaft unter einem freien Namen abgelegt
+            # (nie eine fruehere Kopie ueberschreiben).
+            clean_path = _free_copy_path(orig_file)
+            conflict_path.rename(clean_path)
+            log.info("Konflikt geloest: Beide Dateien beibehalten (%s)", clean_path.name)
 
 
 class DefaultSyncService:

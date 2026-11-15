@@ -35,6 +35,8 @@ class FileState:
     remote_path: str
     uploaded_at: datetime
     remote_mtime: str | None = None
+    #: Lokal geloescht, Cloud-Kopie besteht weiter ("Grabstein").
+    deleted: bool = False
 
 
 class Repository:
@@ -154,7 +156,7 @@ class Repository:
         rows = self._connection.execute(
             """
             SELECT relative_path, size_bytes, mtime_ns, sha256, remote_path,
-                   remote_mtime, uploaded_at
+                   remote_mtime, uploaded_at, deleted
             FROM file_states WHERE pair_uid = ?
             """,
             (pair_uid,),
@@ -168,6 +170,7 @@ class Repository:
                 remote_path=row["remote_path"],
                 remote_mtime=row["remote_mtime"],
                 uploaded_at=_from_iso(row["uploaded_at"]),
+                deleted=bool(row["deleted"]),
             )
             for row in rows
         }
@@ -197,7 +200,8 @@ class Repository:
                     sha256       = excluded.sha256,
                     remote_path  = excluded.remote_path,
                     remote_mtime = excluded.remote_mtime,
-                    uploaded_at  = excluded.uploaded_at
+                    uploaded_at  = excluded.uploaded_at,
+                    deleted      = 0
                 """,
                 (
                     pair_uid,
@@ -239,6 +243,33 @@ class Repository:
             self._connection.execute(
                 "UPDATE file_states SET mtime_ns = ? WHERE pair_uid = ? AND relative_path = ?",
                 (mtime_ns, pair_uid, relative_path),
+            )
+
+    def set_remote_mtime(self, pair_uid: str, *, relative_path: str, remote_mtime: str) -> None:
+        """Traegt die entfernte Aenderungszeit einer unveraenderten Datei nach.
+
+        Nach einem Upload ist sie unbekannt; ohne sie liessen sich spaetere
+        Cloud-Aenderungen gleicher Groesse nicht erkennen.
+        """
+        with transaction(self._connection):
+            self._connection.execute(
+                "UPDATE file_states SET remote_mtime = ? WHERE pair_uid = ? AND relative_path = ?",
+                (remote_mtime, pair_uid, relative_path),
+            )
+
+    def mark_deleted(self, pair_uid: str, relative_paths: Iterable[str]) -> None:
+        """Vermerkt lokal geloeschte Dateien, deren Cloud-Kopie bestehen bleibt.
+
+        Der Eintrag bleibt als Grabstein erhalten, damit die Datei nicht beim
+        naechsten Lauf erneut heruntergeladen wird.
+        """
+        items = [(pair_uid, path) for path in relative_paths]
+        if not items:
+            return
+        with transaction(self._connection):
+            self._connection.executemany(
+                "UPDATE file_states SET deleted = 1 WHERE pair_uid = ? AND relative_path = ?",
+                items,
             )
 
     def forget_file_states(self, pair_uid: str, relative_paths: Iterable[str]) -> None:

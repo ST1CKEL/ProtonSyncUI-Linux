@@ -39,6 +39,10 @@ CREATE TABLE IF NOT EXISTS file_states (
     remote_path   TEXT NOT NULL,
     remote_mtime  TEXT,
     uploaded_at   TEXT NOT NULL,
+    -- 1 = lokal geloescht, Cloud-Kopie bleibt bestehen ("Grabstein").
+    -- Verhindert, dass die Datei beim naechsten Lauf erneut heruntergeladen
+    -- wird, solange sich die Cloud-Fassung nicht aendert.
+    deleted       INTEGER NOT NULL DEFAULT 0 CHECK (deleted IN (0, 1)),
     PRIMARY KEY (pair_uid, relative_path),
     FOREIGN KEY (pair_uid) REFERENCES sync_pairs (uid) ON DELETE CASCADE
 );

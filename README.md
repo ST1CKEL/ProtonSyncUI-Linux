@@ -112,7 +112,10 @@ Der Planer vergleicht den Zustand des lokalen Dateisystems, den Remote-Zustand a
 | Geändert | Unverändert | Gespeichert | **Upload (Aktualisierung)** |
 | Unverändert | Geändert | Gespeichert | **Download (Aktualisierung)** |
 | Geändert | Geändert | Gespeichert | ⚠️ **Konflikt erkannt (Archivierung / Lösungsdialog)** |
-| Gelöscht | Vorhanden | Gespeichert | **Lokal gelöscht** *(Remote-Kopie bleibt geschützt erhalten)* |
+| Gelöscht | Vorhanden | Gespeichert | **Lokal gelöscht** *(Remote-Kopie bleibt geschützt erhalten und wird nicht erneut heruntergeladen)* |
+| Gelöscht | Danach geändert | Gelöscht vermerkt | **Download (Neu)** *(neue Cloud-Fassung wird wieder geladen)* |
+| Vorhanden | Vorhanden, gleiche Größe | Nicht vorhanden | **Überspringen** *(Stand wird als synchron vermerkt)* |
+| Vorhanden | Vorhanden, andere Größe | Nicht vorhanden | ⚠️ **Konflikt** *(lokale Fassung wird gesichert, Cloud-Fassung übernommen)* |
 | Unverändert | Unverändert | Gespeichert | **Überspringen (Identisch)** |
 
 ---

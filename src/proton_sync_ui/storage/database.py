@@ -14,7 +14,7 @@ from ..logging_setup import get_logger
 
 log = get_logger("storage.database")
 
-SCHEMA_VERSION: Final = 2
+SCHEMA_VERSION: Final = 3
 
 #: Wartezeit, bis eine gesperrte Datenbank aufgegeben wird. Grosszuegig, weil
 #: Oberflaeche und systemd-Dienst gleichzeitig zugreifen koennen.
@@ -109,6 +109,16 @@ def _migrate(connection: sqlite3.Connection, *, from_version: int) -> None:
         }
         if "remote_mtime" not in file_state_cols:
             connection.execute("ALTER TABLE file_states ADD COLUMN remote_mtime TEXT")
+
+    if from_version < 3:
+        file_state_cols = {
+            row["name"] for row in connection.execute("PRAGMA table_info(file_states)").fetchall()
+        }
+        if "deleted" not in file_state_cols:
+            connection.execute(
+                "ALTER TABLE file_states ADD COLUMN deleted INTEGER NOT NULL DEFAULT 0 "
+                "CHECK (deleted IN (0, 1))"
+            )
 
     connection.execute("UPDATE schema_version SET version = ?", (SCHEMA_VERSION,))
 

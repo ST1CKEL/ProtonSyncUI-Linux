@@ -122,6 +122,20 @@ def _plan_upload_only(
     errors: list[str],
     hasher: Hasher,
 ) -> None:
+    if state is not None and state.deleted:
+        # Grabstein aus dem 2-Wege-Modus: fuer Einweg-Upload bedeutungslos.
+        if local is None:
+            items.append(
+                PlanItem(
+                    relative_path=rel_path,
+                    action=PlanAction.LOCAL_DELETED,
+                    size_bytes=state.size_bytes,
+                    reason="Lokal geloescht (Kopie bei Proton Drive bleibt bestehen).",
+                )
+            )
+            return
+        state = None
+
     if local is None:
         if state is not None:
             items.append(
@@ -184,6 +198,10 @@ def _plan_download_only(
     *,
     items: list[PlanItem],
 ) -> None:
+    if state is not None and state.deleted:
+        # Der Download-Modus spiegelt die Cloud; lokale Loeschungen gelten nicht.
+        state = None
+
     if remote is None:
         if local is not None:
             items.append(
@@ -210,19 +228,56 @@ def _plan_download_only(
         )
         return
 
-    if (
-        state is None
-        or (state.remote_mtime and remote.modification_time != state.remote_mtime)
-        or state.size_bytes != remote.size_bytes
-    ):
+    if state is None:
+        if local.size_bytes == remote.size_bytes:
+            items.append(
+                PlanItem(
+                    relative_path=rel_path,
+                    action=PlanAction.SKIP_UNCHANGED,
+                    size_bytes=local.size_bytes,
+                    mtime_ns=local.mtime_ns,
+                    remote_path=remote.remote_path,
+                    remote_mtime=remote.modification_time,
+                    reason="Beidseitig vorhanden mit gleicher Groesse.",
+                    record_initial_state=True,
+                )
+            )
+        else:
+            items.append(
+                PlanItem(
+                    relative_path=rel_path,
+                    action=PlanAction.CONFLICT_LOCAL_RENAMED,
+                    size_bytes=remote.size_bytes,
+                    mtime_ns=local.mtime_ns,
+                    remote_path=remote.remote_path,
+                    remote_mtime=remote.modification_time,
+                    reason=(
+                        "Initialer Abgleich mit abweichender Groesse: lokale Fassung wird "
+                        "gesichert, Cloud-Fassung uebernommen."
+                    ),
+                )
+            )
+        return
+
+    if _remote_changed(state, remote):
+        local_changed = local.size_bytes != state.size_bytes or local.mtime_ns != state.mtime_ns
         items.append(
             PlanItem(
                 relative_path=rel_path,
-                action=PlanAction.DOWNLOAD_CHANGED,
+                action=(
+                    PlanAction.CONFLICT_LOCAL_RENAMED
+                    if local_changed
+                    else PlanAction.DOWNLOAD_CHANGED
+                ),
                 size_bytes=remote.size_bytes,
+                mtime_ns=local.mtime_ns,
                 remote_path=remote.remote_path,
                 remote_mtime=remote.modification_time,
-                reason="In der Cloud geaendert.",
+                reason=(
+                    "In der Cloud und lokal geaendert: lokale Fassung wird gesichert."
+                    if local_changed
+                    else "In der Cloud geaendert."
+                ),
             )
         )
         return
@@ -236,6 +291,7 @@ def _plan_download_only(
             remote_path=remote.remote_path,
             remote_mtime=remote.modification_time,
             reason="Lokal und remote synchron.",
+            needs_remote_mtime_refresh=_remote_mtime_missing(state, remote),
         )
     )
 
@@ -251,6 +307,10 @@ def _plan_bidirectional(
     errors: list[str],
     hasher: Hasher,
 ) -> None:
+    if state is not None and state.deleted and local is not None:
+        # Die lokal geloeschte Datei wurde neu angelegt: wie unbekannt behandeln.
+        state = None
+
     # Fall 1: Lokal existiert, Remote existiert NICHT
     if local is not None and remote is None:
         if state is None:
@@ -303,6 +363,29 @@ def _plan_bidirectional(
                     reason="In der Cloud neu vorhanden.",
                 )
             )
+        elif state.deleted:
+            if _remote_changed(state, remote):
+                items.append(
+                    PlanItem(
+                        relative_path=rel_path,
+                        action=PlanAction.DOWNLOAD_NEW,
+                        size_bytes=remote.size_bytes,
+                        remote_path=remote.remote_path,
+                        remote_mtime=remote.modification_time,
+                        reason="Nach der lokalen Loeschung in der Cloud geaendert.",
+                    )
+                )
+            else:
+                items.append(
+                    PlanItem(
+                        relative_path=rel_path,
+                        action=PlanAction.SKIP_UNCHANGED,
+                        size_bytes=remote.size_bytes,
+                        remote_path=remote.remote_path,
+                        remote_mtime=remote.modification_time,
+                        reason="Lokal geloescht; die Cloud-Kopie bleibt erhalten.",
+                    )
+                )
         else:
             items.append(
                 PlanItem(
@@ -312,6 +395,7 @@ def _plan_bidirectional(
                     remote_path=remote.remote_path,
                     remote_mtime=remote.modification_time,
                     reason="Lokal geloescht (Cloud-Kopie bleibt unberuehrt).",
+                    keep_tombstone=True,
                 )
             )
         return
@@ -343,17 +427,24 @@ def _plan_bidirectional(
                     remote_path=remote.remote_path,
                     remote_mtime=remote.modification_time,
                     reason="Beidseitig vorhanden mit gleicher Groesse.",
+                    record_initial_state=True,
                 )
             )
         else:
+            # Ohne gespeicherten Zustand ist unklar, welche Seite neuer ist.
+            # Die lokale Fassung wird deshalb gesichert statt ueberschrieben.
             items.append(
                 PlanItem(
                     relative_path=rel_path,
-                    action=PlanAction.DOWNLOAD_CHANGED,
+                    action=PlanAction.CONFLICT_LOCAL_RENAMED,
                     size_bytes=remote.size_bytes,
+                    mtime_ns=local.mtime_ns,
                     remote_path=remote.remote_path,
                     remote_mtime=remote.modification_time,
-                    reason="Initialer Abgleich: Cloud-Fassung uebernehmen.",
+                    reason=(
+                        "Initialer Abgleich mit abweichender Groesse: lokale Fassung wird "
+                        "gesichert, Cloud-Fassung uebernommen."
+                    ),
                 )
             )
         return
@@ -362,11 +453,7 @@ def _plan_bidirectional(
     local_mtime_changed = local.mtime_ns != state.mtime_ns
     local_changed = local_size_changed or local_mtime_changed
 
-    remote_size_changed = remote.size_bytes != state.size_bytes
-    remote_mtime_changed = bool(
-        state.remote_mtime and remote.modification_time != state.remote_mtime
-    )
-    remote_changed = remote_size_changed or remote_mtime_changed
+    remote_changed = _remote_changed(state, remote)
 
     if not local_changed and not remote_changed:
         items.append(
@@ -378,6 +465,7 @@ def _plan_bidirectional(
                 remote_path=remote.remote_path,
                 remote_mtime=remote.modification_time,
                 reason="Unveraendert.",
+                needs_remote_mtime_refresh=_remote_mtime_missing(state, remote),
             )
         )
         return
@@ -422,6 +510,18 @@ def _plan_bidirectional(
             reason="Konflikt: Beidseitig geaendert. Lokale Version wird archiviert.",
         )
     )
+
+
+def _remote_changed(state: FileState, remote: RemoteScannedFile) -> bool:
+    """Wahr, wenn sich die Cloud-Fassung seit dem gespeicherten Zustand geaendert hat."""
+    if remote.size_bytes != state.size_bytes:
+        return True
+    return bool(state.remote_mtime and remote.modification_time != state.remote_mtime)
+
+
+def _remote_mtime_missing(state: FileState | None, remote: RemoteScannedFile) -> bool:
+    """Wahr, wenn die entfernte Aenderungszeit nachgetragen werden sollte."""
+    return state is not None and not state.remote_mtime and bool(remote.modification_time)
 
 
 def _resolve_ambiguous_local(

@@ -94,6 +94,14 @@ class PlanItem:
     sha256: str | None = None
     #: Inhalt unveraendert, aber die gespeicherte mtime ist veraltet.
     needs_mtime_refresh: bool = False
+    #: Beidseitig vorhanden, aber noch kein Zustand gespeichert: nach dem Lauf
+    #: als synchron vermerken, damit spaetere Aenderungen erkennbar sind.
+    record_initial_state: bool = False
+    #: Die entfernte Aenderungszeit fehlt im Zustand und wird nachgetragen.
+    needs_remote_mtime_refresh: bool = False
+    #: Lokal geloescht, Cloud-Kopie besteht: Zustand als Grabstein behalten,
+    #: statt ihn zu verwerfen (verhindert erneutes Herunterladen).
+    keep_tombstone: bool = False
 
     @property
     def is_upload(self) -> bool:

@@ -192,13 +192,16 @@ Ein Konflikt tritt auf, wenn:
 1. Eine Datei lokal bearbeitet wurde, **und**
 2. dieselbe Datei zeitgleich auf einem anderen Gerät in Proton Drive bearbeitet wurde, **bevor** ein Zwischenabgleich stattfand.
 
+Ein Konflikt entsteht außerdem beim ersten Abgleich, wenn eine Datei lokal und in der Cloud mit unterschiedlicher Größe vorliegt.
+
+In beiden Fällen sichert ProtonSyncUI deine lokale Fassung als `Dateiname.conflict-<Zeitstempel>.ext` und lädt die Cloud-Fassung als `Dateiname.ext` herunter. Die Sicherung bleibt lokal (sie wird nicht hochgeladen), bis du den Konflikt löst.
+
 ### Die 3 Lösungsstrategien
 
 Im Konflikt-Center stehen dir drei sichere Strategien zur Verfügung:
 
 1. **Beide Versionen behalten (Empfohlen)**:
-   * Die lokale Datei wird in `Dateiname.conflict-<Zeitstempel>.ext` umbenannt.
-   * Die neuere Cloud-Version wird als `Dateiname.ext` heruntergeladen.
+   * Die gesicherte lokale Fassung wird dauerhaft als `Dateiname (Lokale Kopie).ext` abgelegt (bei Bedarf `(Lokale Kopie 2)` usw.; vorhandene Kopien werden nie überschrieben) und beim nächsten Lauf hochgeladen.
    * *Ergebnis*: Kein Datenverlust; du kannst beide Versionen in Ruhe vergleichen.
 2. **Lokale Version bevorzugen**:
    * Die lokale Version überschreibt die Fassung in Proton Drive (erzeugt dort eine neue Version).

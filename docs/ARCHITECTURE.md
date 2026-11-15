@@ -152,9 +152,13 @@ L verändert?    R verändert?    L vorhanden?    R vorhanden?
 - **`L == verändert`, `R == unberührt`**: `UPLOAD_CHANGED` (lokale Datei zur Cloud übertragen).
 - **`L == unberührt`, `R == verändert`**: `DOWNLOAD_CHANGED` (Cloud-Datei herunterladen).
 - **`L == verändert`, `R == verändert`**: `CONFLICT_LOCAL_RENAMED` (Konflikt: lokale Datei wird gesichert, Cloud-Fassung heruntergeladen).
-- **`L == gelöscht`, `R == vorhanden`**: `LOCAL_DELETED` (Kopie in der Cloud bleibt gemäß Sicherheitsrichtlinie geschützt erhalten).
+- **`L == gelöscht`, `R == vorhanden`**: `LOCAL_DELETED` (Kopie in der Cloud bleibt gemäß Sicherheitsrichtlinie geschützt erhalten). Der DB-Eintrag bleibt als *Grabstein* (`file_states.deleted = 1`) bestehen, damit die Datei nicht beim nächsten Lauf erneut heruntergeladen wird. Ändert sich die Cloud-Fassung danach, wird sie wieder als `DOWNLOAD_NEW` geladen.
+- **`L == vorhanden`, `R == vorhanden`, kein DB-Eintrag** (erster Abgleich): gleiche Größe → `SKIP_UNCHANGED`, der Stand wird als synchron vermerkt; andere Größe → `CONFLICT_LOCAL_RENAMED`, die lokale Fassung wird also nie ungesichert überschrieben.
 - **`L == neu`, `R == nicht vorhanden`**: `UPLOAD_NEW` (neue Datei hochladen).
 - **`L == nicht vorhanden`, `R == neu`**: `DOWNLOAD_NEW` (neue Datei herunterladen).
+
+### Downloads
+Die CLI lädt zunächst in ein verstecktes Staging-Verzeichnis (`.proton-sync-ui-dl-*`) neben der Zieldatei. Erst nach einem vollständigen Download wird bei einem Konflikt die lokale Fassung als `name.conflict-<Unix-Zeit>.ext` gesichert und die neue Datei atomar an ihren Platz gesetzt. Schlägt die Sicherung fehl, bleibt die lokale Datei unverändert. Staging-Verzeichnisse und Konfliktsicherungen sind standardmäßig vom Sync ausgenommen.
 
 ---
 

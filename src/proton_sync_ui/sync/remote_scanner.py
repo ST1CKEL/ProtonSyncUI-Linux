@@ -80,121 +80,133 @@ async def scan_remote_directory(
     visited_paths: set[str] = set()
     scanned_folders = 0
 
-    async def worker() -> None:
+    async def process(current_path: str, prefix: PurePosixPath) -> None:
         nonlocal scanned_folders
-        while True:
-            try:
-                current_path, prefix = await queue.get()
-            except asyncio.CancelledError:
-                break
+        async with lock:
+            if current_path in visited_paths:
+                return
+            visited_paths.add(current_path)
 
+        try:
+            nodes = await adapter.list_dir(current_path)
+        except RemotePathNotFoundError:
+            log.debug("Entfernter Ordner existiert nicht: %s", current_path)
+            nodes = []
+        except Exception as error:
+            label = prefix.as_posix() or current_path
             async with lock:
-                if current_path in visited_paths:
-                    queue.task_done()
+                errors.append(f"{label}: {error}")
+            log.warning("Fehler beim Lesen des entfernten Ordners %s: %s", current_path, error)
+            nodes = []
+
+        async with lock:
+            scanned_folders += 1
+            for node in nodes:
+                name = node.name
+                if not name:
                     continue
-                visited_paths.add(current_path)
 
-            try:
-                nodes = await adapter.list_dir(current_path)
-            except RemotePathNotFoundError:
-                log.debug("Entfernter Ordner existiert nicht: %s", current_path)
-                nodes = []
-            except Exception as error:
-                label = prefix.as_posix() or current_path
-                async with lock:
-                    errors.append(f"{label}: {error}")
-                log.warning("Fehler beim Lesen des entfernten Ordners %s: %s", current_path, error)
-                nodes = []
+                relative = prefix / name
+                path_text = relative.as_posix()
 
-            async with lock:
-                scanned_folders += 1
-                for node in nodes:
-                    name = node.name
-                    if not name:
-                        continue
-
-                    relative = prefix / name
-                    path_text = relative.as_posix()
-
-                    if not name_is_supported(name):
-                        skips.append(
-                            ScanSkip(
-                                relative_path=relative,
-                                action=PlanAction.SKIP_UNSUPPORTED_NAME,
-                                reason="Name enthaelt nicht unterstuetzte Zeichen.",
-                            )
+                if not name_is_supported(name):
+                    skips.append(
+                        ScanSkip(
+                            relative_path=relative,
+                            action=PlanAction.SKIP_UNSUPPORTED_NAME,
+                            reason="Name enthaelt nicht unterstuetzte Zeichen.",
                         )
-                        continue
+                    )
+                    continue
 
-                    if node.is_folder:
-                        if rules.is_dir_ignored(path_text):
-                            skips.append(
-                                ScanSkip(
-                                    relative_path=relative,
-                                    action=PlanAction.SKIP_EXCLUDED,
-                                    reason="Entfernter Ordner durch Ausschlussregel ausgenommen.",
-                                )
-                            )
-                            continue
-                        queue.put_nowait((node.path, relative))
-                        continue
-
-                    if node.is_docs_or_sheet:
-                        skips.append(
-                            ScanSkip(
-                                relative_path=relative,
-                                action=PlanAction.SKIP_DOCS_SHEETS,
-                                reason=(
-                                    "Proton Docs und Sheets koennen nicht ueber die CLI "
-                                    "heruntergeladen werden."
-                                ),
-                            )
-                        )
-                        continue
-
-                    if rules.is_ignored(path_text):
+                if node.is_folder:
+                    if rules.is_dir_ignored(path_text):
                         skips.append(
                             ScanSkip(
                                 relative_path=relative,
                                 action=PlanAction.SKIP_EXCLUDED,
-                                reason="Durch Ausschlussregel ausgenommen.",
+                                reason="Entfernter Ordner durch Ausschlussregel ausgenommen.",
                             )
                         )
                         continue
+                    queue.put_nowait((node.path, relative))
+                    continue
 
-                    if max_file_size_bytes is not None and node.size_bytes > max_file_size_bytes:
-                        skips.append(
-                            ScanSkip(
-                                relative_path=relative,
-                                action=PlanAction.SKIP_TOO_LARGE,
-                                reason="Dateigroesse ueberschreitet Limit.",
-                                size_bytes=node.size_bytes,
-                            )
-                        )
-                        continue
-
-                    files.append(
-                        RemoteScannedFile(
+                if node.is_docs_or_sheet:
+                    skips.append(
+                        ScanSkip(
                             relative_path=relative,
-                            remote_path=node.path,
-                            size_bytes=node.size_bytes,
-                            modification_time=node.modification_time,
-                            uid=node.uid,
-                            media_type=node.media_type,
+                            action=PlanAction.SKIP_DOCS_SHEETS,
+                            reason=(
+                                "Proton Docs und Sheets koennen nicht ueber die CLI "
+                                "heruntergeladen werden."
+                            ),
                         )
                     )
+                    continue
 
-                if progress is not None:
+                if rules.is_ignored(path_text):
+                    skips.append(
+                        ScanSkip(
+                            relative_path=relative,
+                            action=PlanAction.SKIP_EXCLUDED,
+                            reason="Durch Ausschlussregel ausgenommen.",
+                        )
+                    )
+                    continue
+
+                if max_file_size_bytes is not None and node.size_bytes > max_file_size_bytes:
+                    skips.append(
+                        ScanSkip(
+                            relative_path=relative,
+                            action=PlanAction.SKIP_TOO_LARGE,
+                            reason="Dateigroesse ueberschreitet Limit.",
+                            size_bytes=node.size_bytes,
+                        )
+                    )
+                    continue
+
+                files.append(
+                    RemoteScannedFile(
+                        relative_path=relative,
+                        remote_path=node.path,
+                        size_bytes=node.size_bytes,
+                        modification_time=node.modification_time,
+                        uid=node.uid,
+                        media_type=node.media_type,
+                    )
+                )
+
+            if progress is not None:
+                try:
                     progress(scanned_folders, len(files))
+                except Exception:
+                    log.exception("Fortschrittsmeldung des Cloud-Scans fehlgeschlagen.")
 
-            queue.task_done()
+    async def worker() -> None:
+        while True:
+            current_path, prefix = await queue.get()
+            try:
+                await process(current_path, prefix)
+            except Exception as error:
+                # Unerwartete Fehler duerfen den Worker nicht beenden, sonst
+                # wartet queue.join() ewig auf ein task_done().
+                async with lock:
+                    errors.append(f"{prefix.as_posix() or current_path}: {error}")
+                log.exception("Unerwarteter Fehler beim Cloud-Scan von %s", current_path)
+            finally:
+                queue.task_done()
 
     num_workers = max(1, min(concurrency, 16))
     workers = [asyncio.create_task(worker()) for _ in range(num_workers)]
-    await queue.join()
-    for w in workers:
-        w.cancel()
-    await asyncio.gather(*workers, return_exceptions=True)
+    try:
+        await queue.join()
+    finally:
+        # Auch bei Abbruch des Scans: keine verwaisten Worker (und damit keine
+        # weiterlaufenden CLI-Prozesse) zuruecklassen.
+        for w in workers:
+            w.cancel()
+        await asyncio.gather(*workers, return_exceptions=True)
 
     return RemoteScanResult(files=tuple(files), skips=tuple(skips), errors=tuple(errors))
 

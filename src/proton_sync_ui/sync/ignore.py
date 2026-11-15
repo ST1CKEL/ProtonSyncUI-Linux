@@ -28,7 +28,18 @@ from typing import Final
 
 #: Regeln, die unabhaengig von der Konfiguration immer gelten. Sie halten
 #: Muell aus dem Backup, der ohnehin nie gewollt ist.
+#: Praefix der versteckten Staging-Verzeichnisse fuer Downloads (siehe
+#: ``SyncEngine._download_one``). Reste nach einem Absturz werden nie
+#: synchronisiert.
+DOWNLOAD_STAGING_PREFIX: Final = ".proton-sync-ui-dl-"
+
+#: Gesicherte lokale Fassungen aus Konflikten: ``name.conflict-<unix-zeit>.ext``.
+#: Sie bleiben lokal, bis der Konflikt im Konflikt-Center geloest ist.
+CONFLICT_COPY_PATTERN: Final = "*.conflict-" + "[0-9]" * 10 + "*"
+
 DEFAULT_PATTERNS: Final[tuple[str, ...]] = (
+    f"{DOWNLOAD_STAGING_PREFIX}*/",
+    CONFLICT_COPY_PATTERN,
     ".git/",
     ".svn/",
     ".hg/",
@@ -235,4 +246,11 @@ class IgnoreMatcher:
         return self.is_ignored(relative_path, is_dir=True)
 
 
-__all__ = ["DEFAULT_PATTERNS", "IgnoreMatcher", "IgnoreRule", "compile_rule"]
+__all__ = [
+    "CONFLICT_COPY_PATTERN",
+    "DEFAULT_PATTERNS",
+    "DOWNLOAD_STAGING_PREFIX",
+    "IgnoreMatcher",
+    "IgnoreRule",
+    "compile_rule",
+]
