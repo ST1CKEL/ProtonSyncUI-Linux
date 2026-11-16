@@ -11,7 +11,7 @@ gi.require_version("Adw", "1")
 
 from gi.repository import Adw, Gio, GLib, Gtk  # noqa: E402
 
-from .. import APP_ID, APP_TITLE, __version__, launcher, settings, update  # noqa: E402
+from .. import APP_ID, APP_TITLE, launcher, settings, update  # noqa: E402
 from ..cli_adapter.adapter import ProtonDriveAdapter  # noqa: E402
 from ..cli_adapter.capabilities import Capabilities, probe  # noqa: E402
 from ..logging_setup import get_logger  # noqa: E402
@@ -35,6 +35,7 @@ from ..services.default_services import (  # noqa: E402
 from ..storage.locking import is_locked  # noqa: E402
 from ..storage.repository import Repository  # noqa: E402
 from ..systemd.manager import SystemdManager, SystemdUnavailableError  # noqa: E402
+from .about_dialog import AboutDialog  # noqa: E402
 from .log_window import LogWindow  # noqa: E402
 from .pair_dialog import PairDialog  # noqa: E402
 from .pair_row import PairRow  # noqa: E402
@@ -947,21 +948,8 @@ class MainWindow(Adw.ApplicationWindow):
         self._runner.submit_coroutine(work, on_done=done, on_error=failed)
 
     def show_about(self) -> None:
-        about = Adw.AboutDialog(
-            application_name=APP_TITLE,
-            version=__version__,
-            developer_name="ProtonSyncUI Contributors",
-            application_icon=APP_ID,
-            website=update.PROJECT_URL,
-            issue_url=f"{update.PROJECT_URL}/issues",
-            license_type=Gtk.License.MIT_X11,
-            comments=(
-                "Fedora-native 2-Wege-Synchronisation und Backups mit Proton Drive.\n\n"
-                "ProtonSyncUI steuert ausschliesslich die offizielle proton-drive-CLI. "
-                "Bei Proton Drive wird niemals etwas geloescht."
-            ),
-        )
-        about.present(self)
+        """Zeigt "Info & Lizenz" samt Entwickler-Logo."""
+        AboutDialog(self).present(self)
 
     def _install_actions(self) -> None:
         entries = {

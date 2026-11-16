@@ -270,7 +270,12 @@ class TestDialogs:
         main_window._show_errors_dialog(stored_pair, record)
 
     def test_about_dialog_states_the_security_model(self, main_window) -> None:
+        from proton_sync_ui.ui.about_dialog import AboutDialog, developer_logo_path
+
         main_window.show_about()
+        # Das Entwickler-Logo wird mit dem Paket ausgeliefert.
+        assert developer_logo_path() is not None
+        assert AboutDialog(main_window).get_title() == "Ueber ProtonSyncUI"
 
     def test_delete_confirmation_mentions_remote_stays(
         self,

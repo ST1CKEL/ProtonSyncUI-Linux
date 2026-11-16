@@ -17,7 +17,11 @@
   <img src="https://img.shields.io/badge/Linux-Fedora%20%7C%20Ubuntu%20%7C%20Debian%20%7C%20Arch%20%7C%20openSUSE-51A2DA?style=flat-square&logo=linux&logoColor=white" alt="Linux Distros">
   <img src="https://img.shields.io/badge/License-MIT-green?style=flat-square" alt="License MIT">
   <img src="https://img.shields.io/badge/Tests-465%20passed-brightgreen?style=flat-square" alt="Tests">
-  <img src="https://img.shields.io/badge/Version-0.3.0-0EA5A8?style=flat-square" alt="Version 0.3.0">
+  <img src="https://img.shields.io/badge/Version-0.3.1-0EA5A8?style=flat-square" alt="Version 0.3.1">
+</p>
+
+<p align="center">
+  Ein Projekt von <a href="https://stickelbroeck.com"><b>Stickelbroeck Labs</b></a>
 </p>
 
 ---

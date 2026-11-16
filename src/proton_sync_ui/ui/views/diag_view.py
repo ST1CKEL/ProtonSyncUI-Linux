@@ -75,7 +75,7 @@ class DiagnosticsView(Gtk.Box):
         about_group = Adw.PreferencesGroup(title="Ueber ProtonSyncUI")
         about_row = Adw.ActionRow(
             title=f"{APP_TITLE} {__version__}",
-            subtitle="Fedora-native 2-Wege-Synchronisation mit Proton Drive.",
+            subtitle="2-Wege-Synchronisation mit Proton Drive · entwickelt von Stickelbroeck Labs",
         )
         about_btn = Gtk.Button(label="Info & Lizenz", css_classes=["flat"])
         about_btn.connect("clicked", lambda _: self._window.show_about())
