@@ -12,6 +12,8 @@ from typing import Final
 
 import gi
 
+from ..i18n import tr
+
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 from gi.repository import Adw, Gdk, Gtk  # noqa: E402
@@ -74,7 +76,7 @@ class AboutDialog(Adw.Dialog):
     __gtype_name__ = "ProtonSyncUIAboutDialog"
 
     def __init__(self, parent: Gtk.Window) -> None:
-        super().__init__(title=f"Ueber {APP_TITLE}")
+        super().__init__(title=tr("Ueber {0}").format(APP_TITLE))
         self._parent = parent
         self.set_content_width(460)
         self.set_content_height(680)
@@ -120,9 +122,11 @@ class AboutDialog(Adw.Dialog):
 
         comments = Gtk.Label(
             label=(
-                "2-Wege-Synchronisation und Backups mit Proton Drive.\n"
-                "ProtonSyncUI steuert ausschliesslich die offizielle proton-drive-CLI. "
-                "Bei Proton Drive wird niemals etwas geloescht."
+                tr(
+                    "2-Wege-Synchronisation und Backups mit Proton Drive.\n"
+                    "ProtonSyncUI steuert ausschliesslich die offizielle proton-drive-CLI. "
+                    "Bei Proton Drive wird niemals etwas geloescht."
+                )
             ),
             wrap=True,
             justify=Gtk.Justification.CENTER,
@@ -136,7 +140,9 @@ class AboutDialog(Adw.Dialog):
         card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
         card.add_css_class("developer-card")
 
-        caption = Gtk.Label(label="Entwickelt von", css_classes=["caption", "developer-caption"])
+        caption = Gtk.Label(
+            label=tr("Entwickelt von"), css_classes=["caption", "developer-caption"]
+        )
         card.append(caption)
 
         logo = developer_logo_path()
@@ -158,9 +164,13 @@ class AboutDialog(Adw.Dialog):
     def _build_links(self) -> Gtk.Widget:
         group = Adw.PreferencesGroup()
         for title, subtitle, uri in (
-            ("Entwickler", DEVELOPER_NAME, DEVELOPER_URL),
-            ("Projektseite", "Quelltext und Dokumentation bei GitHub", update.PROJECT_URL),
-            ("Fehler melden", "Problem oder Wunsch einreichen", f"{update.PROJECT_URL}/issues"),
+            (tr("Entwickler"), DEVELOPER_NAME, DEVELOPER_URL),
+            (tr("Projektseite"), tr("Quelltext und Dokumentation bei GitHub"), update.PROJECT_URL),
+            (
+                tr("Fehler melden"),
+                tr("Problem oder Wunsch einreichen"),
+                f"{update.PROJECT_URL}/issues",
+            ),
         ):
             row = Adw.ActionRow(title=title, subtitle=subtitle, activatable=True)
             row.add_suffix(Gtk.Image.new_from_icon_name("adw-external-link-symbolic"))
@@ -170,8 +180,8 @@ class AboutDialog(Adw.Dialog):
 
     def _build_license(self) -> Gtk.Widget:
         group = Adw.PreferencesGroup()
-        expander = Adw.ExpanderRow(title="Lizenz", subtitle="MIT-Lizenz -- freie Software")
-        text = Gtk.Label(label=_MIT_NOTICE, wrap=True, xalign=0, selectable=True)
+        expander = Adw.ExpanderRow(title=tr("Lizenz"), subtitle=tr("MIT-Lizenz -- freie Software"))
+        text = Gtk.Label(label=tr(_MIT_NOTICE), wrap=True, xalign=0, selectable=True)
         text.add_css_class("caption")
         text.set_margin_top(12)
         text.set_margin_bottom(12)

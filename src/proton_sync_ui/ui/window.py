@@ -3,15 +3,18 @@
 from __future__ import annotations
 
 import asyncio
+from pathlib import Path
 
 import gi
+
+from ..i18n import tr
 
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 
 from gi.repository import Adw, Gio, GLib, Gtk  # noqa: E402
 
-from .. import APP_ID, APP_TITLE, launcher, settings, update  # noqa: E402
+from .. import APP_ID, APP_TITLE, cli_update, launcher, settings, update  # noqa: E402
 from ..cli_adapter.adapter import ProtonDriveAdapter  # noqa: E402
 from ..cli_adapter.capabilities import Capabilities, probe  # noqa: E402
 from ..logging_setup import get_logger  # noqa: E402
@@ -40,7 +43,7 @@ from .log_window import LogWindow  # noqa: E402
 from .pair_dialog import PairDialog  # noqa: E402
 from .pair_row import PairRow  # noqa: E402
 from .preflight import show_error_dialog  # noqa: E402
-from .runner import AsyncRunner  # noqa: E402
+from .runner import AsyncRunner, idle_call  # noqa: E402
 from .tray import TrayState  # noqa: E402
 from .views.activity_view import ActivityView  # noqa: E402
 from .views.conflicts_view import ConflictsView  # noqa: E402
@@ -77,6 +80,7 @@ class MainWindow(Adw.ApplicationWindow):
         self._caps: Capabilities | None = None
         self._update_info: update.UpdateInfo | None = None
         self._update_busy = False
+        self._cli_update_busy = False
         self._conflict_count = 0
         self._last_snapshot: tuple[object, ...] | None = None
         self._last_error_text: dict[str, str] = {}
@@ -144,17 +148,17 @@ class MainWindow(Adw.ApplicationWindow):
         # Hinzufuegen-Button im Sidebar-Header
         add_btn = Gtk.Button(
             icon_name="list-add-symbolic",
-            tooltip_text="Sync-Paar hinzufuegen",
+            tooltip_text=tr("Sync-Paar hinzufuegen"),
         )
         add_btn.connect("clicked", lambda _: self.show_add_pair_dialog())
         header.pack_start(add_btn)
 
         # App-Menue
         menu = Gio.Menu()
-        menu.append("Protokoll anzeigen", "win.show-log")
-        menu.append("Zeitplaene aktualisieren", "win.sync-systemd")
-        menu.append("Nach Updates suchen", "win.check-update")
-        menu.append("Ueber ProtonSyncUI", "win.about")
+        menu.append(tr("Protokoll anzeigen"), "win.show-log")
+        menu.append(tr("Zeitplaene aktualisieren"), "win.sync-systemd")
+        menu.append(tr("Nach Updates suchen"), "win.check-update")
+        menu.append(tr("Ueber ProtonSyncUI"), "win.about")
         menu_btn = Gtk.MenuButton(icon_name="open-menu-symbolic", menu_model=menu)
         header.pack_end(menu_btn)
 
@@ -163,14 +167,16 @@ class MainWindow(Adw.ApplicationWindow):
         self._sidebar_list.add_css_class("navigation-sidebar")
         self._sidebar_list.connect("row-selected", self._on_nav_selected)
 
-        self._row_overview = self._create_nav_row("view-dashboard-symbolic", "Uebersicht")
-        self._row_pairs = self._create_nav_row("folder-remote-symbolic", "Sync-Paare")
-        self._row_activity = self._create_nav_row("document-open-recent-symbolic", "Aktivitaet")
+        self._row_overview = self._create_nav_row("view-dashboard-symbolic", tr("Uebersicht"))
+        self._row_pairs = self._create_nav_row("folder-remote-symbolic", tr("Sync-Paare"))
+        self._row_activity = self._create_nav_row("document-open-recent-symbolic", tr("Aktivitaet"))
         self._row_conflicts, self._conflicts_badge = self._create_nav_row_with_badge(
-            "dialog-warning-symbolic", "Konflikte"
+            "dialog-warning-symbolic", tr("Konflikte")
         )
-        self._row_settings = self._create_nav_row("preferences-system-symbolic", "Einstellungen")
-        self._row_diag = self._create_nav_row("system-help-symbolic", "Diagnose & Hilfe")
+        self._row_settings = self._create_nav_row(
+            "preferences-system-symbolic", tr("Einstellungen")
+        )
+        self._row_diag = self._create_nav_row("system-help-symbolic", tr("Diagnose & Hilfe"))
 
         self._sidebar_list.append(self._row_overview)
         self._sidebar_list.append(self._row_pairs)
@@ -257,9 +263,9 @@ class MainWindow(Adw.ApplicationWindow):
         self._content_stack.add_named(self.view_diag, "diag")
 
         # Hinweisleisten ueber allen Ansichten: fehlende Anmeldung und Updates.
-        self._login_banner = Adw.Banner(title="", button_label="Anmelden")
+        self._login_banner = Adw.Banner(title="", button_label=tr("Anmelden"))
         self._login_banner.connect("button-clicked", lambda _b: self.start_login())
-        self._update_banner = Adw.Banner(title="", button_label="Jetzt installieren")
+        self._update_banner = Adw.Banner(title="", button_label=tr("Jetzt installieren"))
         self._update_banner.connect("button-clicked", lambda _b: self.install_update())
 
         # Die Leisten sitzen unter der Kopfzeile der jeweils sichtbaren Ansicht
@@ -268,7 +274,7 @@ class MainWindow(Adw.ApplicationWindow):
         self._banner_box.append(self._login_banner)
         self._banner_box.append(self._update_banner)
 
-        self._content_page = Adw.NavigationPage.new(self._content_stack, "Uebersicht")
+        self._content_page = Adw.NavigationPage.new(self._content_stack, tr("Uebersicht"))
         self._split_view.set_content(self._content_page)
 
     def _show_view(self, name: str, title: str) -> None:
@@ -285,21 +291,21 @@ class MainWindow(Adw.ApplicationWindow):
 
     def _on_nav_selected(self, _box: Gtk.ListBox, row: Gtk.ListBoxRow | None) -> None:
         if row == self._row_overview:
-            self._show_view("overview", "Uebersicht")
+            self._show_view("overview", tr("Uebersicht"))
             self.view_overview.refresh()
         elif row == self._row_pairs:
-            self._show_view("pairs", "Sync-Paare")
+            self._show_view("pairs", tr("Sync-Paare"))
             self.view_pairs.refresh()
         elif row == self._row_activity:
-            self._show_view("activity", "Aktivitaet")
+            self._show_view("activity", tr("Aktivitaet"))
             self.view_activity.refresh()
         elif row == self._row_conflicts:
-            self._show_view("conflicts", "Konflikte")
+            self._show_view("conflicts", tr("Konflikte"))
             self.view_conflicts.refresh()
         elif row == self._row_settings:
-            self._show_view("settings", "Einstellungen")
+            self._show_view("settings", tr("Einstellungen"))
         elif row == self._row_diag:
-            self._show_view("diag", "Diagnose & Hilfe")
+            self._show_view("diag", tr("Diagnose & Hilfe"))
 
     def navigate_to(self, view_name: str) -> None:
         """Navigiert programmgesteuert zu einer bestimmten Ansicht."""
@@ -382,13 +388,13 @@ class MainWindow(Adw.ApplicationWindow):
         pairs = self._pair_repo.list_pairs()
         running = [pair.name for pair in pairs if self.pair_is_busy(pair.uid)]
         if running:
-            return TrayState.SYNCING, f"Synchronisiert: {', '.join(running)}"
+            return TrayState.SYNCING, tr("Synchronisiert: {0}").format(", ".join(running))
 
         caps = self._caps
         if caps is not None and not caps.available:
-            return TrayState.ERROR, "Proton-Drive-CLI nicht gefunden"
+            return TrayState.ERROR, tr("Proton-Drive-CLI nicht gefunden")
         if caps is not None and caps.needs_login:
-            return TrayState.ERROR, "Proton Drive ist nicht angemeldet"
+            return TrayState.ERROR, tr("Proton Drive ist nicht angemeldet")
 
         last_runs = self._repository.last_runs(include_dry_runs=False)
         warnings = 0
@@ -397,18 +403,18 @@ class MainWindow(Adw.ApplicationWindow):
             if not pair.enabled or run is None:
                 continue
             if run.status is RunStatus.ERROR:
-                detail = (run.message or "Lauf fehlgeschlagen").splitlines()[0]
-                return TrayState.ERROR, f"Fehler bei '{pair.name}': {detail[:120]}"
+                detail = (run.message or tr("Lauf fehlgeschlagen")).splitlines()[0]
+                return TrayState.ERROR, tr("Fehler bei '{0}': {1}").format(pair.name, detail[:120])
             if run.status is RunStatus.WARNING:
                 warnings += 1
 
         if warnings:
-            return TrayState.WARNING, "Letzter Lauf mit einzelnen Dateifehlern"
+            return TrayState.WARNING, tr("Letzter Lauf mit einzelnen Dateifehlern")
         if self._conflict_count:
-            return TrayState.WARNING, f"{self._conflict_count} Konflikt(e) zu klaeren"
+            return TrayState.WARNING, tr("{0} Konflikt(e) zu klaeren").format(self._conflict_count)
         if not pairs:
-            return TrayState.IDLE, "Noch kein Sync-Paar eingerichtet"
-        return TrayState.IDLE, "Alles synchronisiert"
+            return TrayState.IDLE, tr("Noch kein Sync-Paar eingerichtet")
+        return TrayState.IDLE, tr("Alles synchronisiert")
 
     def update_tray(self) -> None:
         """Uebertraegt den Gesamtzustand in den Infobereich."""
@@ -444,12 +450,14 @@ class MainWindow(Adw.ApplicationWindow):
             if run is None or self.pair_is_busy(pair.uid):
                 continue
             if run.status is RunStatus.ERROR:
-                text = (run.message or "Lauf fehlgeschlagen").splitlines()[0]
+                text = (run.message or tr("Lauf fehlgeschlagen")).splitlines()[0]
                 # Jede Ursache nur einmal melden -- ein stuendlicher Timer soll
                 # nicht stuendlich dieselbe Benachrichtigung ausloesen.
                 if self._last_error_text.get(pair.uid) != text:
                     self._last_error_text[pair.uid] = text
-                    self.notify(f"'{pair.name}': Synchronisierung fehlgeschlagen", text)
+                    self.notify(
+                        tr("'{0}': Synchronisierung fehlgeschlagen").format(pair.name), text
+                    )
             else:
                 self._last_error_text.pop(pair.uid, None)
 
@@ -499,14 +507,14 @@ class MainWindow(Adw.ApplicationWindow):
         self._caps = caps
 
         if not caps.available:
-            self._login_banner.set_title("Die Proton-Drive-CLI wurde nicht gefunden.")
-            self._login_banner.set_button_label("Download-Seite")
+            self._login_banner.set_title(tr("Die Proton-Drive-CLI wurde nicht gefunden."))
+            self._login_banner.set_button_label(tr("Installieren"))
             self._login_banner.set_revealed(True)
         elif caps.needs_login:
             self._login_banner.set_title(
-                "Proton Drive ist nicht angemeldet – es wird nichts synchronisiert."
+                tr("Proton Drive ist nicht angemeldet – es wird nichts synchronisiert.")
             )
-            self._login_banner.set_button_label("Anmelden")
+            self._login_banner.set_button_label(tr("Anmelden"))
             self._login_banner.set_revealed(True)
         else:
             self._login_banner.set_revealed(False)
@@ -517,31 +525,33 @@ class MainWindow(Adw.ApplicationWindow):
         became_ready = caps.usable and previous is not None and not previous.usable
         if became_ready:
             self._stop_login_poll()
-            self.toast("Proton Drive ist angemeldet. Die Synchronisation startet.", timeout=5)
+            self.toast(tr("Proton Drive ist angemeldet. Die Synchronisation startet."), timeout=5)
             self.view_overview.sync_all(quiet=True)
 
     def start_login(self) -> None:
         """Oeffnet die Anmeldung (bzw. die Download-Seite, wenn die CLI fehlt)."""
         caps = self._caps
         if caps is not None and not caps.available:
-            self.open_uri(update.PROTON_CLI_DOWNLOAD_URL)
+            self.update_cli()
             return
 
         try:
             binary = self._adapter.resolve_binary()
         except Exception as error:
-            show_error_dialog(self, "Proton-Drive-CLI nicht gefunden", str(error))
+            show_error_dialog(self, tr("Proton-Drive-CLI nicht gefunden"), str(error))
             return
 
         if not launcher.open_login_terminal(binary):
             show_error_dialog(
                 self,
-                "Kein Terminalprogramm gefunden",
-                "Bitte in einem Terminal ausfuehren:\n\n    proton-drive auth login",
+                tr("Kein Terminalprogramm gefunden"),
+                tr("Bitte in einem Terminal ausfuehren:\n\n    proton-drive auth login"),
             )
             return
 
-        self.toast("Anmeldung im Terminal gestartet – bitte im Browser abschliessen.", timeout=8)
+        self.toast(
+            tr("Anmeldung im Terminal gestartet – bitte im Browser abschliessen."), timeout=8
+        )
         self._login_poll_left = LOGIN_POLL_ATTEMPTS
         if not self._login_poll_id:
             self._login_poll_id = GLib.timeout_add_seconds(LOGIN_POLL_SECONDS, self._login_poll)
@@ -558,6 +568,130 @@ class MainWindow(Adw.ApplicationWindow):
         if self._login_poll_id:
             GLib.source_remove(self._login_poll_id)
             self._login_poll_id = 0
+
+    # ------------------------------------------------------------------
+    # Proton-Drive-CLI installieren / aktualisieren
+    # ------------------------------------------------------------------
+
+    def update_cli(self) -> None:
+        """Sucht die aktuelle CLI bei Proton und bietet Installation bzw. Update an."""
+        if self._cli_update_busy:
+            return
+        if any(self.pair_is_busy(pair.uid) for pair in self._pair_repo.list_pairs()):
+            show_error_dialog(
+                self,
+                tr("Synchronisierung laeuft"),
+                tr(
+                    "Die Proton-Drive-CLI wird gerade von einem Sync-Lauf benutzt. "
+                    "Bitte nach dessen Ende erneut versuchen."
+                ),
+            )
+            return
+
+        self._cli_update_busy = True
+        self.view_settings.show_cli_update_state(
+            tr("Suche bei Proton nach der aktuellen CLI …"), busy=True
+        )
+
+        caps = self._caps
+        current_binary = caps.binary_path if caps is not None else None
+        current_version = caps.cli_version if caps is not None and caps.available else ""
+
+        def found(release: object) -> None:
+            self._cli_update_busy = False
+            if not isinstance(release, cli_update.CliRelease):
+                return
+            if not cli_update.is_update_available(release, current_version):
+                self.view_settings.show_cli_update_state(
+                    tr("Die Proton-Drive-CLI ist aktuell (Version {0}).").format(current_version)
+                )
+                self.toast(tr("Die Proton-Drive-CLI ist aktuell."))
+                return
+            target = cli_update.target_path(current_binary)
+            self.view_settings.show_cli_update_state(
+                tr("Version {0} steht bei Proton bereit.").format(release.version)
+            )
+            dialog = Adw.AlertDialog(
+                heading=(
+                    tr("Proton-Drive-CLI {0} installieren?").format(release.version)
+                    if not current_version
+                    else tr("Proton-Drive-CLI auf {0} aktualisieren?").format(release.version)
+                ),
+                body=tr(
+                    "Quelle: proton.me (offizieller Download). Die SHA-512-Pruefsumme wird vor "
+                    "der Installation geprueft.\n\nZiel: {0}\nDie bisherige Fassung bleibt als "
+                    "{1} erhalten, die Anmeldung bei Proton Drive ebenfalls."
+                ).format(target, f"{target.name}.bak"),
+            )
+            dialog.add_response("cancel", tr("Abbrechen"))
+            dialog.add_response("install", tr("Installieren"))
+            dialog.set_response_appearance("install", Adw.ResponseAppearance.SUGGESTED)
+            dialog.set_default_response("install")
+            dialog.set_close_response("cancel")
+            dialog.connect(
+                "response",
+                lambda _d, response: (
+                    self._install_cli(release, target) if response == "install" else None
+                ),
+            )
+            dialog.present(self)
+
+        def failed(error: BaseException) -> None:
+            self._cli_update_busy = False
+            log.warning("CLI-Suche fehlgeschlagen: %s", error)
+            self.view_settings.show_cli_update_state(str(error))
+            show_error_dialog(self, tr("Proton-Drive-CLI"), str(error))
+
+        self._runner.submit_coroutine(
+            lambda: asyncio.to_thread(cli_update.fetch_release), on_done=found, on_error=failed
+        )
+
+    def _install_cli(self, release: cli_update.CliRelease, target: Path) -> None:
+        self._cli_update_busy = True
+        self.view_settings.show_cli_update_state(
+            tr("Proton-Drive-CLI {0} wird heruntergeladen …").format(release.version), busy=True
+        )
+
+        def progress(message: str) -> None:
+            idle_call(lambda: self.view_settings.show_cli_update_state(message, busy=True))
+
+        def done(version: object) -> None:
+            self._cli_update_busy = False
+            # Der Pfad kann sich geaendert haben (Erstinstallation nach ~/.local/bin).
+            self._adapter = ProtonDriveAdapter()
+            self.toast(tr("Proton-Drive-CLI {0} ist installiert.").format(version), timeout=5)
+            self.check_cli()
+
+        def failed(error: BaseException) -> None:
+            self._cli_update_busy = False
+            log.error("CLI-Installation fehlgeschlagen: %s", error)
+            self.view_settings.show_cli_update_state(tr("Die Installation ist fehlgeschlagen."))
+            show_error_dialog(self, tr("Proton-Drive-CLI"), str(error))
+
+        self._runner.submit_coroutine(
+            lambda: asyncio.to_thread(
+                cli_update.install_release, release, target, progress=progress
+            ),
+            on_done=done,
+            on_error=failed,
+        )
+
+    def offer_restart(self, heading: str, body: str) -> None:
+        """Bietet nach einer Aenderung, die einen Neustart braucht, diesen an."""
+        dialog = Adw.AlertDialog(heading=heading, body=body)
+        dialog.add_response("later", tr("Spaeter"))
+        dialog.add_response("restart", tr("Jetzt neu starten"))
+        dialog.set_response_appearance("restart", Adw.ResponseAppearance.SUGGESTED)
+        dialog.set_default_response("restart")
+        dialog.set_close_response("later")
+
+        def on_response(_dialog: Adw.AlertDialog, response: str) -> None:
+            app = self.get_application()
+            if response == "restart" and app is not None and launcher.restart_gui():
+                app.quit()
+
+        dialog.connect("response", on_response)
+        dialog.present(self)
 
     def open_uri(self, uri: str) -> None:
         """Oeffnet eine Adresse im Standardprogramm."""
@@ -577,7 +711,7 @@ class MainWindow(Adw.ApplicationWindow):
         if self._update_busy:
             return
         self._update_busy = True
-        self.view_settings.show_update_state("Suche nach Updates …", busy=True)
+        self.view_settings.show_update_state(tr("Suche nach Updates …"), busy=True)
 
         def done(info: object) -> None:
             self._update_busy = False
@@ -586,35 +720,39 @@ class MainWindow(Adw.ApplicationWindow):
             self._update_info = info
             if info.available:
                 self._update_banner.set_title(
-                    f"ProtonSyncUI {info.latest_version} ist verfuegbar "
-                    f"(installiert: {info.current_version})."
+                    tr("ProtonSyncUI {0} ist verfuegbar (installiert: {1}).").format(
+                        info.latest_version, info.current_version
+                    )
                 )
                 self._update_banner.set_revealed(True)
                 self.view_settings.show_update_state(
-                    f"Version {info.latest_version} ist verfuegbar.", available=True
+                    tr("Version {0} ist verfuegbar.").format(info.latest_version), available=True
                 )
                 if manual:
-                    self.toast(f"Update auf Version {info.latest_version} verfuegbar.")
+                    self.toast(tr("Update auf Version {0} verfuegbar.").format(info.latest_version))
                 else:
                     self.notify(
-                        "Update fuer ProtonSyncUI verfuegbar",
-                        f"Version {info.latest_version} kann in den Einstellungen "
-                        "installiert werden.",
+                        tr("Update fuer ProtonSyncUI verfuegbar"),
+                        tr("Version {0} kann in den Einstellungen installiert werden.").format(
+                            info.latest_version
+                        ),
                     )
             else:
                 self._update_banner.set_revealed(False)
                 self.view_settings.show_update_state(
-                    f"ProtonSyncUI ist aktuell (Version {info.current_version})."
+                    tr("ProtonSyncUI ist aktuell (Version {0}).").format(info.current_version)
                 )
                 if manual:
-                    self.toast("ProtonSyncUI ist aktuell.")
+                    self.toast(tr("ProtonSyncUI ist aktuell."))
 
         def failed(error: BaseException) -> None:
             self._update_busy = False
             log.warning("Update-Suche fehlgeschlagen: %s", error)
-            self.view_settings.show_update_state(f"Update-Suche fehlgeschlagen: {error}")
+            self.view_settings.show_update_state(
+                tr("Update-Suche fehlgeschlagen: {0}").format(error)
+            )
             if manual:
-                self.toast("Die Update-Suche ist fehlgeschlagen (keine Verbindung?).")
+                self.toast(tr("Die Update-Suche ist fehlgeschlagen (keine Verbindung?)."))
 
         self._runner.submit_coroutine(
             lambda: asyncio.to_thread(update.check_for_update), on_done=done, on_error=failed
@@ -626,31 +764,35 @@ class MainWindow(Adw.ApplicationWindow):
         if info is None or not info.available or self._update_busy:
             return
         if any(self._sync_service.is_running(p.uid) for p in self._pair_repo.list_pairs()):
-            self.toast("Bitte zuerst die laufende Synchronisierung abwarten.")
+            self.toast(tr("Bitte zuerst die laufende Synchronisierung abwarten."))
             return
 
         self._update_busy = True
         self._update_banner.set_revealed(False)
         self.view_settings.show_update_state(
-            f"Version {info.latest_version} wird installiert …", busy=True
+            tr("Version {0} wird installiert …").format(info.latest_version), busy=True
         )
-        self.toast(f"Version {info.latest_version} wird installiert …")
+        self.toast(tr("Version {0} wird installiert …").format(info.latest_version))
 
         def done(_output: object) -> None:
             self._update_busy = False
             self._update_info = None
             self.view_settings.show_update_state(
-                f"Version {info.latest_version} ist installiert – Neustart erforderlich."
+                tr("Version {0} ist installiert – Neustart erforderlich.").format(
+                    info.latest_version
+                )
             )
             dialog = Adw.AlertDialog(
-                heading="Update installiert",
+                heading=tr("Update installiert"),
                 body=(
-                    f"ProtonSyncUI {info.latest_version} wurde installiert. "
-                    "Die neue Version wird nach einem Neustart der Anwendung aktiv."
+                    tr(
+                        "ProtonSyncUI {0} wurde installiert. Die neue Version wird nach einem "
+                        "Neustart der Anwendung aktiv."
+                    ).format(info.latest_version)
                 ),
             )
-            dialog.add_response("later", "Spaeter")
-            dialog.add_response("restart", "Jetzt neu starten")
+            dialog.add_response("later", tr("Spaeter"))
+            dialog.add_response("restart", tr("Jetzt neu starten"))
             dialog.set_response_appearance("restart", Adw.ResponseAppearance.SUGGESTED)
             dialog.set_default_response("restart")
             dialog.set_close_response("later")
@@ -670,9 +812,9 @@ class MainWindow(Adw.ApplicationWindow):
             log.error("Update fehlgeschlagen: %s", error)
             self._update_banner.set_revealed(True)
             self.view_settings.show_update_state(
-                "Die Installation ist fehlgeschlagen.", available=True
+                tr("Die Installation ist fehlgeschlagen."), available=True
             )
-            show_error_dialog(self, "Update fehlgeschlagen", str(error))
+            show_error_dialog(self, tr("Update fehlgeschlagen"), str(error))
 
         self._runner.submit_coroutine(
             lambda: asyncio.to_thread(update.install_update, info), on_done=done, on_error=failed
@@ -697,11 +839,13 @@ class MainWindow(Adw.ApplicationWindow):
         if record.dry_run and pair is not None:
             self._show_dry_run_preview(pair, record, plan)
         elif record.status is RunStatus.SUCCESS:
-            name = pair.name if pair else "Sync-Paar"
-            self.toast(f"'{name}': Synchronisierung erfolgreich abgeschlossen.")
+            name = pair.name if pair else tr("Sync-Paar")
+            self.toast(tr("'{0}': Synchronisierung erfolgreich abgeschlossen.").format(name))
         elif record.status is RunStatus.WARNING and pair is not None:
             self.toast(
-                f"'{pair.name}': abgeschlossen, {record.failed_files} Datei(en) fehlgeschlagen.",
+                tr("'{0}': abgeschlossen, {1} Datei(en) fehlgeschlagen.").format(
+                    pair.name, record.failed_files
+                ),
                 timeout=6,
             )
         elif record.status is RunStatus.ERROR and pair is not None:
@@ -714,10 +858,10 @@ class MainWindow(Adw.ApplicationWindow):
 
     def _on_sync_error(self, error: BaseException) -> None:
         if isinstance(error, asyncio.CancelledError):
-            self.toast("Der Lauf wurde abgebrochen.")
+            self.toast(tr("Der Lauf wurde abgebrochen."))
         else:
             log.error("Sync-Fehler: %s", error)
-            self.toast(f"Fehler: {error}", timeout=6)
+            self.toast(tr("Fehler: {0}").format(error), timeout=6)
         self.refresh()
 
     # ------------------------------------------------------------------
@@ -733,20 +877,22 @@ class MainWindow(Adw.ApplicationWindow):
     def _save_pair(self, pair: SyncPair) -> None:
         self._pair_repo.save_pair(pair)
         self.refresh()
-        self.toast(f"'{pair.name}' gespeichert.")
+        self.toast(tr("'{0}' gespeichert.").format(pair.name))
         self.sync_systemd_units(quiet=True)
 
     def confirm_delete_pair(self, pair: SyncPair) -> None:
         dialog = Adw.AlertDialog(
-            heading=f"'{pair.name}' entfernen?",
+            heading=tr("'{0}' entfernen?").format(pair.name),
             body=(
-                "Entfernt werden nur die Konfiguration und der lokale Sync-Status.\n\n"
-                "Ihre Dateien bei Proton Drive und auf der Festplatte bleiben "
-                "vollstaendig erhalten."
+                tr(
+                    "Entfernt werden nur die Konfiguration und der lokale Sync-Status.\n\n"
+                    "Ihre Dateien bei Proton Drive und auf der Festplatte bleiben "
+                    "vollstaendig erhalten."
+                )
             ),
         )
-        dialog.add_response("keep", "Behalten")
-        dialog.add_response("delete", "Entfernen")
+        dialog.add_response("keep", tr("Behalten"))
+        dialog.add_response("delete", tr("Entfernen"))
         dialog.set_response_appearance("delete", Adw.ResponseAppearance.DESTRUCTIVE)
         dialog.set_default_response("keep")
         dialog.set_close_response("keep")
@@ -761,13 +907,13 @@ class MainWindow(Adw.ApplicationWindow):
                     log.warning("Timer konnte nicht entfernt werden: %s", err)
                 self._pair_repo.delete_pair(pair.uid)
                 self.refresh()
-                self.toast(f"Sync-Paar '{pair.name}' entfernt.")
+                self.toast(tr("Sync-Paar '{0}' entfernt.").format(pair.name))
 
         dialog.connect("response", on_response)
         dialog.present(self)
 
     def _show_dry_run_preview(self, pair: SyncPair, record: RunRecord, plan: UploadPlan) -> None:
-        dialog = Adw.Dialog(title=f"Dry-Run – {pair.name}")
+        dialog = Adw.Dialog(title=tr("Dry-Run – {0}").format(pair.name))
         dialog.set_content_width(700)
         dialog.set_content_height(580)
 
@@ -778,15 +924,19 @@ class MainWindow(Adw.ApplicationWindow):
         page = Adw.PreferencesPage()
 
         summary = Adw.PreferencesGroup(
-            title="Vorschau der Aktionen",
+            title=tr("Vorschau der Aktionen"),
             description=record.message or plan.describe(),
         )
         stat_row = Adw.ActionRow(
-            title="Geplante Datenmengen",
+            title=tr("Geplante Datenmengen"),
             subtitle=(
-                f"Downloads: {plan.download_count} ({format_size(plan.total_download_bytes)}) · "
-                f"Uploads: {plan.upload_count} ({format_size(plan.total_upload_bytes)}) · "
-                f"Uebersprungen: {plan.skip_count}"
+                tr("Downloads: {0} ({1}) · Uploads: {2} ({3}) · Uebersprungen: {4}").format(
+                    plan.download_count,
+                    format_size(plan.total_download_bytes),
+                    plan.upload_count,
+                    format_size(plan.total_upload_bytes),
+                    plan.skip_count,
+                )
             ),
         )
         stat_row.add_css_class("property")
@@ -795,7 +945,7 @@ class MainWindow(Adw.ApplicationWindow):
 
         # Downloads Gruppe
         if plan.downloads:
-            dl_group = Adw.PreferencesGroup(title=f"Downloads ({len(plan.downloads)})")
+            dl_group = Adw.PreferencesGroup(title=tr("Downloads ({0})").format(len(plan.downloads)))
             for item in plan.downloads[:100]:
                 row = Adw.ActionRow(
                     title=GLib.markup_escape_text(str(item.relative_path)),
@@ -809,7 +959,7 @@ class MainWindow(Adw.ApplicationWindow):
 
         # Uploads Gruppe
         if plan.uploads:
-            up_group = Adw.PreferencesGroup(title=f"Uploads ({len(plan.uploads)})")
+            up_group = Adw.PreferencesGroup(title=tr("Uploads ({0})").format(len(plan.uploads)))
             for item in plan.uploads[:100]:
                 row = Adw.ActionRow(
                     title=GLib.markup_escape_text(str(item.relative_path)),
@@ -824,8 +974,8 @@ class MainWindow(Adw.ApplicationWindow):
         # Uebersprungene Dateien
         if plan.skipped:
             skip_group = Adw.PreferencesGroup(
-                title=f"Uebersprungen ({len(plan.skipped)})",
-                description="Unveraenderte oder ausgenommene Dateien.",
+                title=tr("Uebersprungen ({0})").format(len(plan.skipped)),
+                description=tr("Unveraenderte oder ausgenommene Dateien."),
             )
             for item in plan.skipped[:50]:
                 row = Adw.ActionRow(
@@ -838,9 +988,12 @@ class MainWindow(Adw.ApplicationWindow):
         # Lokale Loeschungen
         if plan.local_deletions:
             del_group = Adw.PreferencesGroup(
-                title=f"Lokal geloescht ({len(plan.local_deletions)})",
+                title=tr("Lokal geloescht ({0})").format(len(plan.local_deletions)),
                 description=(
-                    "Diese Dateien wurden lokal entfernt. Bei Proton Drive bleiben sie erhalten."
+                    tr(
+                        "Diese Dateien wurden lokal entfernt. Bei Proton Drive bleiben sie "
+                        "erhalten."
+                    )
                 ),
             )
             for item in plan.local_deletions[:50]:
@@ -853,7 +1006,7 @@ class MainWindow(Adw.ApplicationWindow):
 
         # Scan-Warnungen
         if plan.scan_errors:
-            err_group = Adw.PreferencesGroup(title="Hinweise beim Einlesen")
+            err_group = Adw.PreferencesGroup(title=tr("Hinweise beim Einlesen"))
             for warning in plan.scan_errors[:50]:
                 err_group.add(Adw.ActionRow(title=GLib.markup_escape_text(str(warning))))
             page.add(err_group)
@@ -863,7 +1016,9 @@ class MainWindow(Adw.ApplicationWindow):
         toolbar.set_content(scrolled)
 
         if plan.uploads or plan.downloads:
-            start_btn = Gtk.Button(label="Jetzt synchronisieren", css_classes=["suggested-action"])
+            start_btn = Gtk.Button(
+                label=tr("Jetzt synchronisieren"), css_classes=["suggested-action"]
+            )
 
             def _on_start_clicked(_btn: Gtk.Button) -> None:
                 dialog.close()
@@ -877,12 +1032,12 @@ class MainWindow(Adw.ApplicationWindow):
 
     def _show_errors_dialog(self, pair: SyncPair, record: RunRecord) -> None:
         if not record.errors and record.message:
-            show_error_dialog(self, f"Lauf fuer '{pair.name}'", record.message)
+            show_error_dialog(self, tr("Lauf fuer '{0}'").format(pair.name), record.message)
             return
         if not record.errors:
             return
 
-        dialog = Adw.Dialog(title=f"Fehler – {pair.name}")
+        dialog = Adw.Dialog(title=tr("Fehler – {0}").format(pair.name))
         dialog.set_content_width(700)
         dialog.set_content_height(560)
 
@@ -891,13 +1046,15 @@ class MainWindow(Adw.ApplicationWindow):
 
         page = Adw.PreferencesPage()
         group = Adw.PreferencesGroup(
-            title=f"{len(record.errors)} Datei(en) fehlgeschlagen",
-            description="Der Lauf wurde fortgesetzt. Uebrige Dateien wurden uebertragen.",
+            title=tr("{0} Datei(en) fehlgeschlagen").format(len(record.errors)),
+            description=tr("Der Lauf wurde fortgesetzt. Uebrige Dateien wurden uebertragen."),
         )
         for error in record.errors[:200]:
             row = Adw.ActionRow(
                 title=GLib.markup_escape_text(error.relative_path),
-                subtitle=GLib.markup_escape_text(f"{error.attempts} Versuch(e): {error.message}"),
+                subtitle=GLib.markup_escape_text(
+                    tr("{0} Versuch(e): {1}").format(error.attempts, error.message)
+                ),
             )
             group.add(row)
         page.add(group)
@@ -919,10 +1076,12 @@ class MainWindow(Adw.ApplicationWindow):
             if not quiet:
                 show_error_dialog(
                     self,
-                    "systemd nicht verfuegbar",
+                    tr("systemd nicht verfuegbar"),
                     (
-                        "'systemctl' wurde nicht gefunden. "
-                        "Hintergrund-Timer stehen nicht zur Verfuegung."
+                        tr(
+                            "'systemctl' wurde nicht gefunden. "
+                            "Hintergrund-Timer stehen nicht zur Verfuegung."
+                        )
                     ),
                 )
             return
@@ -935,15 +1094,15 @@ class MainWindow(Adw.ApplicationWindow):
                 return
             count = len(actions) if isinstance(actions, dict) else 0
             self.toast(
-                f"Zeitplaene aktualisiert ({count} Aenderung(en))."
+                tr("Zeitplaene aktualisiert ({0} Aenderung(en)).").format(count)
                 if count
-                else "Zeitplaene sind aktuell."
+                else tr("Zeitplaene sind aktuell.")
             )
 
         def failed(error: BaseException) -> None:
             log.error("systemd-Abgleich fehlgeschlagen: %s", error)
             if not quiet:
-                show_error_dialog(self, "Zeitplan konnte nicht geschrieben werden", str(error))
+                show_error_dialog(self, tr("Zeitplan konnte nicht geschrieben werden"), str(error))
 
         self._runner.submit_coroutine(work, on_done=done, on_error=failed)
 

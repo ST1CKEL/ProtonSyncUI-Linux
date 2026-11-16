@@ -10,6 +10,8 @@ from enum import StrEnum
 from pathlib import Path, PurePosixPath
 from typing import Final
 
+from ..i18n import tr
+
 # Die tatsaechlichen Top-Level-Bereiche der Proton-Drive-CLI. Ermittelt mit
 # `proton-drive filesystem list /` (CLI cli-drive@0.8.0).
 KNOWN_REMOTE_SECTIONS: Final[frozenset[str]] = frozenset(
@@ -76,7 +78,7 @@ _SYNC_MODE_LABELS: dict[SyncMode, str] = {
 
 def sync_mode_label(mode: SyncMode) -> str:
     """Deutsche Bezeichnung eines Synchronisationsmodus."""
-    return _SYNC_MODE_LABELS.get(mode, mode.value)
+    return tr(_SYNC_MODE_LABELS.get(mode, mode.value))
 
 
 def name_is_supported(name: str) -> bool:
@@ -98,27 +100,32 @@ def validate_remote_path(raw: str) -> str:
     """
     text = raw.strip()
     if not text:
-        raise ValidationError("Der Proton-Drive-Zielpfad darf nicht leer sein.")
+        raise ValidationError(tr("Der Proton-Drive-Zielpfad darf nicht leer sein."))
     if not text.startswith("/"):
         raise ValidationError(
-            "Der Zielpfad muss absolut sein und mit '/' beginnen, "
-            f"z. B. {DEFAULT_REMOTE_ROOT}/Backup."
+            tr("Der Zielpfad muss absolut sein und mit '/' beginnen, z. B. {0}/Backup.").format(
+                DEFAULT_REMOTE_ROOT
+            )
         )
     if _CONTROL_CHARS.search(text):
-        raise ValidationError("Der Zielpfad enthaelt nicht darstellbare Steuerzeichen.")
+        raise ValidationError(tr("Der Zielpfad enthaelt nicht darstellbare Steuerzeichen."))
     if "\\" in text:
         raise ValidationError(
-            "Backslashes werden im Zielpfad nicht unterstuetzt. "
-            "Bitte verwende Ordnernamen ohne '\\'."
+            tr(
+                "Backslashes werden im Zielpfad nicht unterstuetzt. "
+                "Bitte verwende Ordnernamen ohne '\\'."
+            )
         )
 
     parts = [part for part in text.split("/") if part]
     if any(part in (".", "..") for part in parts):
-        raise ValidationError("Der Zielpfad darf keine Bestandteile '.' oder '..' enthalten.")
+        raise ValidationError(tr("Der Zielpfad darf keine Bestandteile '.' oder '..' enthalten."))
     if not parts:
         raise ValidationError(
-            "Der Zielpfad darf nicht das Wurzelverzeichnis '/' sein. "
-            f"Waehle einen Ordner unterhalb von {DEFAULT_REMOTE_ROOT}."
+            tr(
+                "Der Zielpfad darf nicht das Wurzelverzeichnis '/' sein. Waehle einen "
+                "Ordner unterhalb von {0}."
+            ).format(DEFAULT_REMOTE_ROOT)
         )
 
     normalized = "/" + "/".join(parts)
@@ -127,22 +134,27 @@ def validate_remote_path(raw: str) -> str:
     if section not in KNOWN_REMOTE_SECTIONS:
         known = ", ".join(sorted(UPLOADABLE_REMOTE_SECTIONS))
         raise ValidationError(
-            f"'{section}' ist kein bekannter Proton-Drive-Bereich. Moegliche Ziele: {known}."
+            tr("'{0}' ist kein bekannter Proton-Drive-Bereich. Moegliche Ziele: {1}.").format(
+                section, known
+            )
         )
     if section not in UPLOADABLE_REMOTE_SECTIONS:
         known = ", ".join(sorted(UPLOADABLE_REMOTE_SECTIONS))
         raise ValidationError(
-            f"In den Bereich '{section}' darf ProtonSyncUI nicht hochladen. "
-            f"Moegliche Ziele: {known}."
+            tr(
+                "In den Bereich '{0}' darf ProtonSyncUI nicht hochladen. Moegliche Ziele: {1}."
+            ).format(section, known)
         )
     if normalized == section and section != DEFAULT_REMOTE_ROOT:
         raise ValidationError(
-            f"Bitte waehle einen Unterordner in '{section}', nicht den Bereich selbst."
+            tr("Bitte waehle einen Unterordner in '{0}', nicht den Bereich selbst.").format(section)
         )
 
     for part in parts[1:]:
         if not name_is_supported(part):
-            raise ValidationError(f"Der Ordnername '{part}' enthaelt nicht unterstuetzte Zeichen.")
+            raise ValidationError(
+                tr("Der Ordnername '{0}' enthaelt nicht unterstuetzte Zeichen.").format(part)
+            )
 
     return normalized
 
@@ -156,28 +168,31 @@ def validate_local_path(raw: str | Path, *, must_exist: bool = True) -> Path:
     """
     text = str(raw).strip()
     if not text:
-        raise ValidationError("Der lokale Quellordner darf nicht leer sein.")
+        raise ValidationError(tr("Der lokale Quellordner darf nicht leer sein."))
 
     candidate = Path(text).expanduser()
     if not candidate.is_absolute():
-        raise ValidationError("Der lokale Quellordner muss ein absoluter Pfad sein.")
+        raise ValidationError(tr("Der lokale Quellordner muss ein absoluter Pfad sein."))
 
     if candidate.is_symlink():
         raise ValidationError(
-            "Der Quellordner ist ein symbolischer Link. "
-            "Bitte waehle den tatsaechlichen Ordner aus -- Symlinks werden nicht synchronisiert."
+            tr(
+                "Der Quellordner ist ein symbolischer Link. "
+                "Bitte waehle den tatsaechlichen Ordner aus -- Symlinks werden nicht "
+                "synchronisiert."
+            )
         )
 
     resolved = candidate.resolve()
 
     if must_exist:
         if not resolved.exists():
-            raise ValidationError(f"Der Ordner '{resolved}' existiert nicht.")
+            raise ValidationError(tr("Der Ordner '{0}' existiert nicht.").format(resolved))
         if not resolved.is_dir():
-            raise ValidationError(f"'{resolved}' ist kein Ordner.")
+            raise ValidationError(tr("'{0}' ist kein Ordner.").format(resolved))
 
     if resolved == Path("/"):
-        raise ValidationError("Das Wurzelverzeichnis '/' ist als Quellordner nicht zulaessig.")
+        raise ValidationError(tr("Das Wurzelverzeichnis '/' ist als Quellordner nicht zulaessig."))
 
     return resolved
 
@@ -207,19 +222,22 @@ class SyncPair:
 
     def __post_init__(self) -> None:
         if not self.name.strip():
-            raise ValidationError("Der Anzeigename darf nicht leer sein.")
+            raise ValidationError(tr("Der Anzeigename darf nicht leer sein."))
         if self.schedule_kind is ScheduleKind.INTERVAL:
             if self.interval_minutes is None:
-                raise ValidationError("Fuer den Zeitplan 'Intervall' fehlt die Angabe in Minuten.")
+                raise ValidationError(
+                    tr("Fuer den Zeitplan 'Intervall' fehlt die Angabe in Minuten.")
+                )
             if not MIN_INTERVAL_MINUTES <= self.interval_minutes <= MAX_INTERVAL_MINUTES:
                 raise ValidationError(
-                    f"Das Intervall muss zwischen {MIN_INTERVAL_MINUTES} und "
-                    f"{MAX_INTERVAL_MINUTES} Minuten liegen."
+                    tr("Das Intervall muss zwischen {0} und {1} Minuten liegen.").format(
+                        MIN_INTERVAL_MINUTES, MAX_INTERVAL_MINUTES
+                    )
                 )
         if self.max_file_size_bytes is not None and self.max_file_size_bytes <= 0:
-            raise ValidationError("Das Groessenlimit pro Datei muss groesser als 0 sein.")
+            raise ValidationError(tr("Das Groessenlimit pro Datei muss groesser als 0 sein."))
         if not self.local_path.is_absolute():
-            raise ValidationError("Der lokale Quellordner muss ein absoluter Pfad sein.")
+            raise ValidationError(tr("Der lokale Quellordner muss ein absoluter Pfad sein."))
 
     @classmethod
     def create(

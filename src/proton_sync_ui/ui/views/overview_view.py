@@ -6,6 +6,8 @@ from typing import TYPE_CHECKING
 
 import gi
 
+from ...i18n import tr
+
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 from gi.repository import Adw, GLib, Gtk  # noqa: E402
@@ -45,7 +47,7 @@ class OverviewView(Gtk.Box):
         # HeaderBar
         header = Adw.HeaderBar()
         self._sync_all_btn = Gtk.Button(
-            label="Alle synchronisieren",
+            label=tr("Alle synchronisieren"),
             icon_name="emblem-synchronizing-symbolic",
             css_classes=["suggested-action"],
         )
@@ -68,10 +70,10 @@ class OverviewView(Gtk.Box):
 
         # 2. Letzte Aktivitaeten
         self._activity_group = Adw.PreferencesGroup(
-            title="Letzte Aktivitaeten",
-            description="Die neuesten Uebertragungen und Ereignisse.",
+            title=tr("Letzte Aktivitaeten"),
+            description=tr("Die neuesten Uebertragungen und Ereignisse."),
         )
-        show_all_btn = Gtk.Button(label="Alle Aktivitaeten anzeigen", css_classes=["flat"])
+        show_all_btn = Gtk.Button(label=tr("Alle Aktivitaeten anzeigen"), css_classes=["flat"])
         show_all_btn.connect("clicked", lambda _: self._window.navigate_to("activity"))
         self._activity_group.set_header_suffix(show_all_btn)
         content_box.append(self._activity_group)
@@ -97,16 +99,16 @@ class OverviewView(Gtk.Box):
 
         text_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
         self._title_label = Gtk.Label(
-            label="Alles synchronisiert", xalign=0, css_classes=["title-2"]
+            label=tr("Alles synchronisiert"), xalign=0, css_classes=["title-2"]
         )
         self._subtitle_label = Gtk.Label(
-            label="Alle konfigurierten Ordner sind auf dem aktuellen Stand.",
+            label=tr("Alle konfigurierten Ordner sind auf dem aktuellen Stand."),
             xalign=0,
             css_classes=["body", "dim-label"],
             wrap=True,
         )
         self._meta_label = Gtk.Label(
-            label="Letzter Lauf: soeben",
+            label=tr("Letzter Lauf: soeben"),
             xalign=0,
             css_classes=["caption", "dim-label"],
         )
@@ -139,42 +141,46 @@ class OverviewView(Gtk.Box):
         if any_running:
             self._status_icon.set_from_icon_name("emblem-synchronizing-symbolic")
             self._status_icon.add_css_class("accent")
-            self._title_label.set_label("Synchronisierung laeuft")
+            self._title_label.set_label(tr("Synchronisierung laeuft"))
             self._subtitle_label.set_label(state_text)
         elif any_error:
             self._status_icon.set_from_icon_name("dialog-error-symbolic")
             self._status_icon.add_css_class("error")
-            self._title_label.set_label("Synchronisierung nicht moeglich")
+            self._title_label.set_label(tr("Synchronisierung nicht moeglich"))
             self._subtitle_label.set_label(state_text)
         elif conflicts:
             self._status_icon.set_from_icon_name("emblem-important-symbolic")
             self._status_icon.add_css_class("warning")
-            self._title_label.set_label(f"{conflicts} Konflikt(e) erfordern Aufmerksamkeit")
+            self._title_label.set_label(
+                tr("{0} Konflikt(e) erfordern Aufmerksamkeit").format(conflicts)
+            )
             self._subtitle_label.set_label(
-                "Waehle in der Konfliktansicht, welche Fassungen beibehalten werden sollen."
+                tr("Waehle in der Konfliktansicht, welche Fassungen beibehalten werden sollen.")
             )
         elif not pairs:
             self._status_icon.set_from_icon_name("folder-remote-symbolic")
             self._status_icon.add_css_class("dim-label")
-            self._title_label.set_label("Noch kein Sync-Paar eingerichtet")
+            self._title_label.set_label(tr("Noch kein Sync-Paar eingerichtet"))
             self._subtitle_label.set_label(
-                "Füge dein erstes Sync-Paar hinzu, um die Synchronisation zu starten."
+                tr("Füge dein erstes Sync-Paar hinzu, um die Synchronisation zu starten.")
             )
         else:
             self._status_icon.set_from_icon_name("emblem-ok-symbolic")
             self._status_icon.add_css_class("success")
-            self._title_label.set_label("Alles synchronisiert")
+            self._title_label.set_label(tr("Alles synchronisiert"))
             self._subtitle_label.set_label(
-                f"Alle {len(pairs)} Sync-Paare sind auf dem aktuellen Stand."
+                tr("Alle {0} Sync-Paare sind auf dem aktuellen Stand.").format(len(pairs))
             )
 
         # Letzter Lauf Meta
         if recent_runs:
             last = recent_runs[0]
-            ts = format_timestamp(last.finished_at) if last.finished_at else "laeuft"
-            self._meta_label.set_label(f"Letzter Lauf: {ts} · {last.summary_line()}")
+            ts = format_timestamp(last.finished_at) if last.finished_at else tr("laeuft")
+            self._meta_label.set_label(
+                tr("Letzter Lauf: {0} · {1}").format(ts, last.summary_line())
+            )
         else:
-            self._meta_label.set_label("Noch kein Durchgang ausgefuehrt")
+            self._meta_label.set_label(tr("Noch kein Durchgang ausgefuehrt"))
 
         # Letzte Aktivitaeten befuellen
         if not hasattr(self, "_activity_rows"):
@@ -185,15 +191,15 @@ class OverviewView(Gtk.Box):
         self._activity_rows.clear()
 
         if not recent_runs:
-            empty_row = Adw.ActionRow(title="Noch keine Aktivitaeten vorhanden")
+            empty_row = Adw.ActionRow(title=tr("Noch keine Aktivitaeten vorhanden"))
             empty_row.add_css_class("dim-label")
             self._activity_group.add(empty_row)
             self._activity_rows.append(empty_row)
         else:
             for run in recent_runs:
                 pair = self._pair_repo.get_pair(run.pair_uid)
-                pair_name = pair.name if pair else "Unbekannt"
-                ts = format_timestamp(run.finished_at) if run.finished_at else "laeuft"
+                pair_name = pair.name if pair else tr("Unbekannt")
+                ts = format_timestamp(run.finished_at) if run.finished_at else tr("laeuft")
                 icon_name = {
                     RunStatus.SUCCESS: "emblem-ok-symbolic",
                     RunStatus.RUNNING: "emblem-synchronizing-symbolic",
@@ -230,9 +236,9 @@ class OverviewView(Gtk.Box):
         if quiet:
             return
         if count > 0:
-            self._window.toast(f"{count} Sync-Paar(e) gestartet.")
+            self._window.toast(tr("{0} Sync-Paar(e) gestartet.").format(count))
         else:
-            self._window.toast("Keine aktiven Sync-Paare zum Starten.")
+            self._window.toast(tr("Keine aktiven Sync-Paare zum Starten."))
 
 
 __all__ = ["OverviewView"]

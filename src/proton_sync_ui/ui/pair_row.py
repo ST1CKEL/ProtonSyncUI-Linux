@@ -7,6 +7,8 @@ from datetime import datetime
 
 import gi
 
+from ..i18n import tr
+
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 
@@ -48,7 +50,7 @@ def format_size(num_bytes: int) -> str:
 def format_timestamp(value: datetime | None) -> str:
     """Formatiert einen Zeitstempel in lokaler Zeit."""
     if value is None:
-        return "nie"
+        return tr("nie")
     return value.astimezone().strftime("%d.%m.%Y %H:%M")
 
 
@@ -96,27 +98,27 @@ class PairRow(Adw.ExpanderRow):
 
     def _build_detail_rows(self) -> None:
         """Zeilen mit Pfaden, Zeitplan und Kennzahlen."""
-        self._mode_row = Adw.ActionRow(title="Modus")
+        self._mode_row = Adw.ActionRow(title=tr("Modus"))
         self._mode_row.add_css_class("property")
         self.add_row(self._mode_row)
 
-        self._source_row = Adw.ActionRow(title="Lokaler Ordner")
+        self._source_row = Adw.ActionRow(title=tr("Lokaler Ordner"))
         self._source_row.add_css_class("property")
         self.add_row(self._source_row)
 
-        self._target_row = Adw.ActionRow(title="Proton-Drive-Ordner")
+        self._target_row = Adw.ActionRow(title=tr("Proton-Drive-Ordner"))
         self._target_row.add_css_class("property")
         self.add_row(self._target_row)
 
-        self._schedule_row = Adw.ActionRow(title="Zeitplan")
+        self._schedule_row = Adw.ActionRow(title=tr("Zeitplan"))
         self._schedule_row.add_css_class("property")
         self.add_row(self._schedule_row)
 
-        self._last_run_row = Adw.ActionRow(title="Letzter Lauf")
+        self._last_run_row = Adw.ActionRow(title=tr("Letzter Lauf"))
         self._last_run_row.add_css_class("property")
         self.add_row(self._last_run_row)
 
-        self._counts_row = Adw.ActionRow(title="Dateien")
+        self._counts_row = Adw.ActionRow(title=tr("Dateien"))
         self._counts_row.add_css_class("property")
         self.add_row(self._counts_row)
 
@@ -142,25 +144,25 @@ class PairRow(Adw.ExpanderRow):
         box.set_margin_end(12)
         box.set_halign(Gtk.Align.START)
 
-        self._sync_button = Gtk.Button(label="Jetzt starten")
+        self._sync_button = Gtk.Button(label=tr("Jetzt starten"))
         self._sync_button.add_css_class("suggested-action")
         self._sync_button.connect("clicked", lambda _b: self._on_sync(self.pair))
         box.append(self._sync_button)
 
         self._dry_run_button = Gtk.Button(label="Dry-Run")
         self._dry_run_button.set_tooltip_text(
-            "Zeigt, was uebertragen wuerde, ohne etwas zu uebertragen."
+            tr("Zeigt, was uebertragen wuerde, ohne etwas zu uebertragen.")
         )
         self._dry_run_button.connect("clicked", lambda _b: self._on_dry_run(self.pair))
         box.append(self._dry_run_button)
 
-        self._cancel_button = Gtk.Button(label="Abbrechen")
+        self._cancel_button = Gtk.Button(label=tr("Abbrechen"))
         self._cancel_button.add_css_class("destructive-action")
         self._cancel_button.set_visible(False)
         self._cancel_button.connect("clicked", lambda _b: self._on_cancel(self.pair))
         box.append(self._cancel_button)
 
-        self._edit_button = Gtk.Button(label="Bearbeiten")
+        self._edit_button = Gtk.Button(label=tr("Bearbeiten"))
         self._edit_button.connect("clicked", lambda _b: self._on_edit(self.pair))
         box.append(self._edit_button)
 
@@ -168,13 +170,13 @@ class PairRow(Adw.ExpanderRow):
         self._enable_button.connect("clicked", self._toggle_enabled)
         box.append(self._enable_button)
 
-        log_button = Gtk.Button(label="Log anzeigen")
+        log_button = Gtk.Button(label=tr("Log anzeigen"))
         log_button.connect("clicked", lambda _b: self._on_show_log(self.pair))
         box.append(log_button)
 
         delete_button = Gtk.Button(icon_name="user-trash-symbolic")
         delete_button.set_tooltip_text(
-            "Sync-Paar entfernen. Dateien bei Proton Drive bleiben erhalten."
+            tr("Sync-Paar entfernen. Dateien bei Proton Drive bleiben erhalten.")
         )
         delete_button.add_css_class("flat")
         delete_button.connect("clicked", lambda _b: self._on_delete(self.pair))
@@ -209,14 +211,14 @@ class PairRow(Adw.ExpanderRow):
         self._target_row.set_subtitle(GLib.markup_escape_text(pair.remote_path))
 
         if pair.schedule_kind is ScheduleKind.INTERVAL and pair.interval_minutes:
-            schedule = f"alle {pair.interval_minutes} Minuten (systemd-Timer)"
+            schedule = tr("alle {0} Minuten (systemd-Timer)").format(pair.interval_minutes)
         else:
-            schedule = "manuell"
+            schedule = tr("manuell")
         if not pair.enabled:
-            schedule += " -- deaktiviert"
+            schedule += tr(" -- deaktiviert")
         self._schedule_row.set_subtitle(schedule)
 
-        self._enable_button.set_label("Deaktivieren" if pair.enabled else "Aktivieren")
+        self._enable_button.set_label(tr("Deaktivieren") if pair.enabled else tr("Aktivieren"))
         self._sync_button.set_sensitive(pair.enabled and not self._busy)
         self._dry_run_button.set_sensitive(not self._busy)
 
@@ -231,27 +233,29 @@ class PairRow(Adw.ExpanderRow):
             self._set_status(status)
 
         if record is None:
-            self._last_run_row.set_subtitle("nie")
+            self._last_run_row.set_subtitle(tr("nie"))
             self._counts_row.set_subtitle("--")
             return
 
-        kind = "Dry-Run" if record.dry_run else "Lauf"
+        kind = "Dry-Run" if record.dry_run else tr("Lauf")
         duration = record.duration_seconds
         suffix = f", {duration:.1f}s" if duration is not None else ""
         self._last_run_row.set_subtitle(f"{format_timestamp(record.started_at)} ({kind}{suffix})")
 
-        parts = [f"geplant {record.planned_files}"]
+        parts = [tr("geplant {0}").format(record.planned_files)]
         if record.downloaded_files > 0:
-            parts.append(f"heruntergeladen {record.downloaded_files}")
+            parts.append(tr("heruntergeladen {0}").format(record.downloaded_files))
         if record.uploaded_files > 0 or record.downloaded_files == 0:
-            parts.append(f"hochgeladen {record.uploaded_files}")
-        parts.append(f"fehlgeschlagen {record.failed_files}")
-        parts.append(f"uebersprungen {record.skipped_files}")
+            parts.append(tr("hochgeladen {0}").format(record.uploaded_files))
+        parts.append(tr("fehlgeschlagen {0}").format(record.failed_files))
+        parts.append(tr("uebersprungen {0}").format(record.skipped_files))
         total_bytes = record.uploaded_bytes + record.downloaded_bytes
         if total_bytes:
             parts.append(format_size(total_bytes))
         if record.local_deletions:
-            parts.append(f"{record.local_deletions} lokal geloescht (Proton Drive unveraendert)")
+            parts.append(
+                tr("{0} lokal geloescht (Proton Drive unveraendert)").format(record.local_deletions)
+            )
         self._counts_row.set_subtitle(" · ".join(parts))
 
     update_status = update_run
@@ -279,7 +283,7 @@ class PairRow(Adw.ExpanderRow):
         if busy:
             self._progress_row.set_visible(True)
             self._progress_bar.set_fraction(0.0)
-            self._progress_bar.set_text("Vorbereitung…")
+            self._progress_bar.set_text(tr("Vorbereitung…"))
             self._set_status(PairStatus.RUNNING)
         else:
             self._progress_row.set_visible(False)
@@ -294,7 +298,7 @@ class PairRow(Adw.ExpanderRow):
         self._dry_run_button.set_sensitive(False)
         self._progress_row.set_visible(True)
         self._progress_bar.pulse()
-        self._progress_bar.set_text("Laeuft im Hintergrund (Zeitplan)")
+        self._progress_bar.set_text(tr("Laeuft im Hintergrund (Zeitplan)"))
         self._set_status(PairStatus.RUNNING)
 
     def _set_status(self, status: PairStatus) -> None:

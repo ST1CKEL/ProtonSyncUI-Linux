@@ -23,6 +23,8 @@ from typing import TYPE_CHECKING, Any, Final
 
 import gi
 
+from ..i18n import tr
+
 gi.require_version("Gio", "2.0")
 gi.require_version("GLib", "2.0")
 from gi.repository import Gio, GLib  # noqa: E402
@@ -289,7 +291,7 @@ class TrayService:
         self._registered = False
 
         self._title = APP_TITLE
-        self._status_text = "Bereit"
+        self._status_text = tr("Bereit")
         self._state = TrayState.IDLE
         self._menu_revision = 1
         self._pixmap_cache: dict[TrayState, list[tuple[int, int, bytes]]] = {}
@@ -575,19 +577,21 @@ class TrayService:
         items = [
             (MENU_STATUS, entry(self._status_text, enabled=False)),
             (2, separator),
-            (MENU_OPEN, entry(f"{APP_TITLE} oeffnen", icon="window-new")),
+            (MENU_OPEN, entry(tr("{0} oeffnen").format(APP_TITLE), icon="window-new")),
             (
                 MENU_SYNC,
                 entry(
-                    "Alle jetzt synchronisieren",
+                    tr("Alle jetzt synchronisieren"),
                     enabled=self._state is not TrayState.SYNCING,
                     icon="view-refresh",
                 ),
             ),
         ]
         if self._on_check_update is not None:
-            items.append((MENU_UPDATE, entry("Nach Updates suchen", icon="system-software-update")))
-        items += [(6, separator), (MENU_QUIT, entry("Beenden", icon="application-exit"))]
+            items.append(
+                (MENU_UPDATE, entry(tr("Nach Updates suchen"), icon="system-software-update"))
+            )
+        items += [(6, separator), (MENU_QUIT, entry(tr("Beenden"), icon="application-exit"))]
         return items
 
     def _build_menu_layout(self) -> tuple[int, dict[str, GLib.Variant], list[Any]]:

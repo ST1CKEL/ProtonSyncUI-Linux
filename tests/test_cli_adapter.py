@@ -237,6 +237,7 @@ class TestNoShellInSource:
             "systemd/manager.py",
             "update.py",
             "launcher.py",
+            "cli_update.py",
         }, f"Unerwartete Nutzung von subprocess: {users}"
 
 

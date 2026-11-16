@@ -14,6 +14,7 @@ from datetime import datetime
 from pathlib import Path
 
 from . import APP_NAME
+from .i18n import tr
 
 
 def _xdg_dir(env_var: str, default_relative: str) -> Path:
@@ -84,7 +85,7 @@ def format_size(num_bytes: int) -> str:
 def format_timestamp(value: datetime | None) -> str:
     """Formatiert einen Zeitstempel in lokaler Zeit."""
     if value is None:
-        return "nie"
+        return tr("nie")
     return value.astimezone().strftime("%d.%m.%Y %H:%M")
 
 

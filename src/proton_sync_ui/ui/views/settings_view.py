@@ -7,11 +7,13 @@ from typing import TYPE_CHECKING
 
 import gi
 
+from ...i18n import tr
+
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 from gi.repository import Adw, GLib, Gtk  # noqa: E402
 
-from ... import __version__, autostart, settings, update  # noqa: E402
+from ... import __version__, autostart, i18n, settings, update  # noqa: E402
 from ...cli_adapter.capabilities import Capabilities  # noqa: E402
 from ...systemd.manager import SystemdManager  # noqa: E402
 
@@ -46,21 +48,34 @@ class SettingsView(Gtk.Box):
 
     def _build_general_group(self) -> Adw.PreferencesGroup:
         group = Adw.PreferencesGroup(
-            title="Allgemein und Autostart",
-            description="Systemintegration, Infobereich und Hintergrundstart.",
+            title=tr("Allgemein und Autostart"),
+            description=tr("Systemintegration, Infobereich und Hintergrundstart."),
         )
 
+        self._language_row = Adw.ComboRow(
+            title=tr("Sprache"),
+            subtitle=tr("Gilt fuer Fenster, Infobereich und Benachrichtigungen"),
+            model=Gtk.StringList.new(
+                [tr("Automatisch (Sprache des Systems)"), *i18n.LANGUAGES.values()]
+            ),
+        )
+        codes = ("", *i18n.LANGUAGES)
+        stored = self._window.settings.language
+        self._language_row.set_selected(codes.index(stored) if stored in codes else 0)
+        self._language_row.connect("notify::selected", self._on_language_changed)
+        group.add(self._language_row)
+
         self._autostart_row = Adw.SwitchRow(
-            title="Beim Anmelden automatisch starten",
-            subtitle="Startet ProtonSyncUI mit der Arbeitsflaeche (KDE Plasma, GNOME)",
+            title=tr("Beim Anmelden automatisch starten"),
+            subtitle=tr("Startet ProtonSyncUI mit der Arbeitsflaeche (KDE Plasma, GNOME)"),
         )
         self._autostart_row.set_active(autostart.is_enabled())
         self._autostart_row.connect("notify::active", self._on_autostart_changed)
         group.add(self._autostart_row)
 
         self._minimized_row = Adw.SwitchRow(
-            title="Minimiert im Infobereich starten",
-            subtitle="Beim Autostart nur das Symbol in der Kontrollleiste zeigen",
+            title=tr("Minimiert im Infobereich starten"),
+            subtitle=tr("Beim Autostart nur das Symbol in der Kontrollleiste zeigen"),
         )
         self._minimized_row.set_active(autostart.is_minimized())
         self._minimized_row.set_sensitive(self._autostart_row.get_active())
@@ -68,18 +83,20 @@ class SettingsView(Gtk.Box):
         group.add(self._minimized_row)
 
         self._notif_row = Adw.SwitchRow(
-            title="Desktop-Benachrichtigungen",
-            subtitle="Bei fehlgeschlagenen Laeufen und verfuegbaren Updates benachrichtigen",
+            title=tr("Desktop-Benachrichtigungen"),
+            subtitle=tr("Bei fehlgeschlagenen Laeufen und verfuegbaren Updates benachrichtigen"),
         )
         self._notif_row.set_active(self._window.settings.notifications)
         self._notif_row.connect("notify::active", self._on_setting_changed)
         group.add(self._notif_row)
 
         tray_note = Adw.ActionRow(
-            title="Infobereich",
+            title=tr("Infobereich"),
             subtitle=(
-                "Beim Schliessen des Fensters laeuft ProtonSyncUI im Infobereich weiter. "
-                "Beenden ueber das Symbol-Menue oder Strg+Q."
+                tr(
+                    "Beim Schliessen des Fensters laeuft ProtonSyncUI im Infobereich weiter. "
+                    "Beenden ueber das Symbol-Menue oder Strg+Q."
+                )
             ),
         )
         tray_note.add_css_class("property")
@@ -89,32 +106,32 @@ class SettingsView(Gtk.Box):
     def _build_update_group(self) -> Adw.PreferencesGroup:
         group = Adw.PreferencesGroup(
             title="Updates",
-            description="Neue Versionen von ProtonSyncUI suchen und installieren.",
+            description=tr("Neue Versionen von ProtonSyncUI suchen und installieren."),
         )
 
         self._update_row = Adw.ActionRow(
-            title=f"Installierte Version: {__version__}",
-            subtitle="Noch nicht nach Updates gesucht.",
+            title=tr("Installierte Version: {0}").format(__version__),
+            subtitle=tr("Noch nicht nach Updates gesucht."),
         )
         self._update_spinner = Gtk.Spinner(valign=Gtk.Align.CENTER)
         self._update_spinner.set_visible(False)
         self._update_row.add_suffix(self._update_spinner)
 
         self._install_btn = Gtk.Button(
-            label="Installieren", valign=Gtk.Align.CENTER, css_classes=["suggested-action"]
+            label=tr("Installieren"), valign=Gtk.Align.CENTER, css_classes=["suggested-action"]
         )
         self._install_btn.set_visible(False)
         self._install_btn.connect("clicked", lambda _b: self._window.install_update())
         self._update_row.add_suffix(self._install_btn)
 
-        self._check_btn = Gtk.Button(label="Nach Updates suchen", valign=Gtk.Align.CENTER)
+        self._check_btn = Gtk.Button(label=tr("Nach Updates suchen"), valign=Gtk.Align.CENTER)
         self._check_btn.connect("clicked", lambda _b: self._window.check_for_updates(manual=True))
         self._update_row.add_suffix(self._check_btn)
         group.add(self._update_row)
 
         self._auto_update_row = Adw.SwitchRow(
-            title="Automatisch nach Updates suchen",
-            subtitle="Hoechstens einmal taeglich; installiert wird erst nach Bestaetigung",
+            title=tr("Automatisch nach Updates suchen"),
+            subtitle=tr("Hoechstens einmal taeglich; installiert wird erst nach Bestaetigung"),
         )
         self._auto_update_row.set_active(self._window.settings.auto_update_check)
         self._auto_update_row.connect("notify::active", self._on_setting_changed)
@@ -124,30 +141,38 @@ class SettingsView(Gtk.Box):
     def _build_cli_group(self) -> Adw.PreferencesGroup:
         group = Adw.PreferencesGroup(
             title="Proton Drive",
-            description="Anmeldung und Zustand der offiziellen Proton-Drive-CLI.",
+            description=tr("Anmeldung und Zustand der offiziellen Proton-Drive-CLI."),
         )
 
-        self._cli_status_row = Adw.ActionRow(title="Verbindung", subtitle="Wird geprueft …")
+        self._cli_status_row = Adw.ActionRow(title=tr("Verbindung"), subtitle=tr("Wird geprueft …"))
         self._cli_status_icon = Gtk.Image.new_from_icon_name("content-loading-symbolic")
         self._cli_status_row.add_prefix(self._cli_status_icon)
 
         self._login_btn = Gtk.Button(
-            label="Anmelden", valign=Gtk.Align.CENTER, css_classes=["suggested-action"]
+            label=tr("Anmelden"), valign=Gtk.Align.CENTER, css_classes=["suggested-action"]
         )
         self._login_btn.set_visible(False)
         self._login_btn.connect("clicked", lambda _b: self._window.start_login())
         self._cli_status_row.add_suffix(self._login_btn)
 
-        check_btn = Gtk.Button(label="Erneut pruefen", valign=Gtk.Align.CENTER)
+        check_btn = Gtk.Button(label=tr("Erneut pruefen"), valign=Gtk.Align.CENTER)
         check_btn.connect("clicked", lambda _b: self.check_cli())
         self._cli_status_row.add_suffix(check_btn)
         group.add(self._cli_status_row)
 
-        self._cli_update_row = Adw.ActionRow(title="Neue CLI-Version verfuegbar")
+        self._cli_update_row = Adw.ActionRow(title=tr("Neue CLI-Version verfuegbar"))
         self._cli_update_row.add_prefix(
             Gtk.Image.new_from_icon_name("software-update-available-symbolic")
         )
-        download_btn = Gtk.Button(label="Download-Seite", valign=Gtk.Align.CENTER)
+        self._cli_update_btn = Gtk.Button(
+            label=tr("Aktualisieren"), valign=Gtk.Align.CENTER, css_classes=["suggested-action"]
+        )
+        self._cli_update_btn.connect("clicked", lambda _b: self._window.update_cli())
+        self._cli_update_row.add_suffix(self._cli_update_btn)
+        self._cli_spinner = Gtk.Spinner(valign=Gtk.Align.CENTER)
+        self._cli_spinner.set_visible(False)
+        self._cli_update_row.add_suffix(self._cli_spinner)
+        download_btn = Gtk.Button(label=tr("Download-Seite"), valign=Gtk.Align.CENTER)
         download_btn.connect(
             "clicked", lambda _b: self._window.open_uri(update.PROTON_CLI_DOWNLOAD_URL)
         )
@@ -157,13 +182,15 @@ class SettingsView(Gtk.Box):
         return group
 
     def _build_privacy_group(self) -> Adw.PreferencesGroup:
-        group = Adw.PreferencesGroup(title="Datenschutz")
+        group = Adw.PreferencesGroup(title=tr("Datenschutz"))
         notice = Adw.ActionRow(
-            title="Keine Nutzungsdaten",
+            title=tr("Keine Nutzungsdaten"),
             subtitle=(
-                "ProtonSyncUI arbeitet lokal und sendet keine Nutzungsdaten. Die Update-Suche "
-                "ruft lediglich die aktuelle Versionsnummer bei GitHub ab; die Anmeldung "
-                "geschieht ausschliesslich in der Proton-Drive-CLI."
+                tr(
+                    "ProtonSyncUI arbeitet lokal und sendet keine Nutzungsdaten. Die Update-Suche "
+                    "ruft lediglich die aktuelle Versionsnummer bei GitHub ab; die Anmeldung "
+                    "geschieht ausschliesslich in der Proton-Drive-CLI."
+                )
             ),
         )
         notice.add_css_class("property")
@@ -176,34 +203,54 @@ class SettingsView(Gtk.Box):
 
     def check_cli(self) -> None:
         """Stoesst eine neue Pruefung der CLI an."""
-        self._cli_status_row.set_subtitle("Wird geprueft …")
+        self._cli_status_row.set_subtitle(tr("Wird geprueft …"))
         self._window.check_cli()
 
     def show_capabilities(self, caps: Capabilities) -> None:
         """Zeigt das Ergebnis der CLI-Pruefung (im Hauptthread aufzurufen)."""
         version = caps.cli_version or "?"
         if not caps.available:
-            icon, text = "dialog-error-symbolic", "Die Proton-Drive-CLI wurde nicht gefunden."
+            icon, text = "dialog-error-symbolic", tr("Die Proton-Drive-CLI wurde nicht gefunden.")
         elif caps.authenticated:
-            icon, text = "emblem-ok-symbolic", f"Angemeldet (CLI {version})."
+            icon, text = "emblem-ok-symbolic", tr("Angemeldet (CLI {0}).").format(version)
         elif caps.auth_check_failed:
             icon = "dialog-warning-symbolic"
-            text = f"CLI {version} gefunden; Anmeldezustand nicht pruefbar (keine Verbindung?)."
+            text = tr(
+                "CLI {0} gefunden; Anmeldezustand nicht pruefbar (keine Verbindung?)."
+            ).format(version)
         else:
-            icon, text = "dialog-error-symbolic", f"Nicht angemeldet (CLI {version})."
+            icon, text = "dialog-error-symbolic", tr("Nicht angemeldet (CLI {0}).").format(version)
 
         self._cli_status_icon.set_from_icon_name(icon)
         self._cli_status_row.set_subtitle(GLib.markup_escape_text(text))
         self._login_btn.set_visible(caps.needs_login)
 
-        self._cli_update_row.set_visible(bool(caps.newer_cli_version))
-        if caps.newer_cli_version:
+        # Die Zeile bietet die Installation (CLI fehlt) oder die Aktualisierung an.
+        self._cli_spinner.set_visible(False)
+        self._cli_update_btn.set_sensitive(True)
+        if not caps.available:
+            self._cli_update_row.set_visible(True)
+            self._cli_update_row.set_title(tr("Proton-Drive-CLI installieren"))
+            self._cli_update_btn.set_label(tr("Installieren"))
             self._cli_update_row.set_subtitle(
                 GLib.markup_escape_text(
-                    f"Version {caps.newer_cli_version} (installiert: {version}). "
-                    "Die CLI wird von Proton bereitgestellt und manuell aktualisiert."
+                    tr("Laedt die aktuelle CLI von proton.me und prueft ihre SHA-512-Pruefsumme.")
                 )
             )
+        elif caps.newer_cli_version:
+            self._cli_update_row.set_visible(True)
+            self._cli_update_row.set_title(tr("Neue CLI-Version verfuegbar"))
+            self._cli_update_btn.set_label(tr("Aktualisieren"))
+            self._cli_update_row.set_subtitle(
+                GLib.markup_escape_text(
+                    tr(
+                        "Version {0} (installiert: {1}). Der Download von proton.me wird "
+                        "per SHA-512 geprueft; die Anmeldung bleibt erhalten."
+                    ).format(caps.newer_cli_version, version)
+                )
+            )
+        else:
+            self._cli_update_row.set_visible(False)
 
     def show_update_state(self, text: str, *, busy: bool = False, available: bool = False) -> None:
         """Zeigt den Stand der Update-Suche bzw. -Installation."""
@@ -216,6 +263,28 @@ class SettingsView(Gtk.Box):
     # ------------------------------------------------------------------
     # Ereignisse
     # ------------------------------------------------------------------
+
+    def show_cli_update_state(self, text: str, *, busy: bool = False) -> None:
+        """Zeigt den Stand einer CLI-Installation bzw. -Aktualisierung."""
+        self._cli_update_row.set_visible(True)
+        self._cli_update_row.set_subtitle(GLib.markup_escape_text(text))
+        self._cli_spinner.set_visible(busy)
+        self._cli_spinner.set_spinning(busy)
+        self._cli_update_btn.set_sensitive(not busy)
+
+    def _on_language_changed(self, row: Adw.ComboRow, _param: object) -> None:
+        if self._loading:
+            return
+        code = ("", *i18n.LANGUAGES)[row.get_selected()]
+        current = self._window.settings
+        if current.language == code:
+            return
+        current.language = code
+        settings.save(current)
+        self._window.offer_restart(
+            tr("Sprache geaendert"),
+            tr("Die neue Sprache wird nach einem Neustart der Anwendung verwendet."),
+        )
 
     def _on_setting_changed(self, _row: Adw.SwitchRow, _param: object) -> None:
         if self._loading:
@@ -235,12 +304,12 @@ class SettingsView(Gtk.Box):
         try:
             if enabled:
                 autostart.enable(minimized=minimized)
-                mode = " (minimiert)" if minimized else ""
-                self._window.toast(f"Autostart{mode} aktiviert.")
+                mode = tr(" (minimiert)") if minimized else ""
+                self._window.toast(tr("Autostart{0} aktiviert.").format(mode))
             elif autostart.disable():
-                self._window.toast("Autostart deaktiviert.")
+                self._window.toast(tr("Autostart deaktiviert."))
         except OSError as error:
-            self._window.toast(f"Autostart konnte nicht geaendert werden: {error}")
+            self._window.toast(tr("Autostart konnte nicht geaendert werden: {0}").format(error))
             return
 
         # systemd erzeugt die Autostart-Units aus dem Verzeichnis neu.

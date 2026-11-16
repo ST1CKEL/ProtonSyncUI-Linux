@@ -6,6 +6,8 @@ from typing import TYPE_CHECKING
 
 import gi
 
+from ...i18n import tr
+
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 from gi.repository import Adw, Gtk  # noqa: E402
@@ -29,7 +31,7 @@ class ConflictsView(Gtk.Box):
         # HeaderBar
         header = Adw.HeaderBar()
         self._resolve_all_btn = Gtk.Button(
-            label="Alle: Beide behalten",
+            label=tr("Alle: Beide behalten"),
             icon_name="emblem-ok-symbolic",
             css_classes=["flat"],
         )
@@ -43,8 +45,8 @@ class ConflictsView(Gtk.Box):
         # 1. Empty State
         empty_page = Adw.StatusPage(
             icon_name="emblem-ok-symbolic",
-            title="Keine Konflikte vorhanden",
-            description="Alle Dateien wurden erfolgreich synchronisiert.",
+            title=tr("Keine Konflikte vorhanden"),
+            description=tr("Alle Dateien wurden erfolgreich synchronisiert."),
         )
         self._stack.add_named(empty_page, "empty")
 
@@ -52,8 +54,8 @@ class ConflictsView(Gtk.Box):
         scroll = Gtk.ScrolledWindow(hscrollbar_policy=Gtk.PolicyType.NEVER)
         clamp = Adw.Clamp(maximum_size=860, tightening_threshold=600)
         self._group = Adw.PreferencesGroup(
-            title="Offene Dateikonflikte",
-            description="Waehle fuer jede Datei, welche Version beibehalten werden soll.",
+            title=tr("Offene Dateikonflikte"),
+            description=tr("Waehle fuer jede Datei, welche Version beibehalten werden soll."),
         )
         clamp.set_child(self._group)
         scroll.set_child(clamp)
@@ -82,14 +84,16 @@ class ConflictsView(Gtk.Box):
 
     def _on_resolve_conflict(self, conflict: ConflictItem, resolution: str) -> None:
         self._conflict_service.resolve_conflict(conflict, resolution)
-        self._window.toast(f"Konflikt '{conflict.relative_path}' geloest.")
+        self._window.toast(tr("Konflikt '{0}' geloest.").format(conflict.relative_path))
         self.refresh()
 
     def _on_resolve_all_clicked(self, _btn: Gtk.Button) -> None:
         conflicts = self._conflict_service.list_conflicts()
         for conflict in conflicts:
             self._conflict_service.resolve_conflict(conflict, "keep_both")
-        self._window.toast(f"{len(conflicts)} Konflikte geloest (Beide Versionen behalten).")
+        self._window.toast(
+            tr("{0} Konflikte geloest (Beide Versionen behalten).").format(len(conflicts))
+        )
         self.refresh()
 
 

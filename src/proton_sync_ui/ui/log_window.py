@@ -7,6 +7,8 @@ from typing import Any
 
 import gi
 
+from ..i18n import tr
+
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 
@@ -45,18 +47,18 @@ class LogWindow(Adw.Window):
         super().__init__(transient_for=parent, modal=False)
         self._pair = pair
         self.set_default_size(900, 620)
-        self.set_title(f"Protokoll – {pair.name}" if pair else "Protokoll")
+        self.set_title(tr("Protokoll – {0}").format(pair.name) if pair else tr("Protokoll"))
 
         toolbar = Adw.ToolbarView()
         header = Adw.HeaderBar()
 
         reload_button = Gtk.Button(icon_name="view-refresh-symbolic")
-        reload_button.set_tooltip_text("Neu laden")
+        reload_button.set_tooltip_text(tr("Neu laden"))
         reload_button.connect("clicked", lambda _b: self.reload())
         header.pack_start(reload_button)
 
         copy_button = Gtk.Button(icon_name="edit-copy-symbolic")
-        copy_button.set_tooltip_text("Sichtbare Eintraege in die Zwischenablage kopieren")
+        copy_button.set_tooltip_text(tr("Sichtbare Eintraege in die Zwischenablage kopieren"))
         copy_button.connect("clicked", self._copy_visible)
         header.pack_end(copy_button)
 
@@ -80,11 +82,11 @@ class LogWindow(Adw.Window):
         box.set_margin_start(12)
         box.set_margin_end(12)
 
-        box.append(Gtk.Label(label="Anzeigen:", css_classes=["dim-label"]))
+        box.append(Gtk.Label(label=tr("Anzeigen:"), css_classes=["dim-label"]))
 
         self._info_toggle = Gtk.ToggleButton(label="Info", active=True)
-        self._warning_toggle = Gtk.ToggleButton(label="Warnung", active=True)
-        self._error_toggle = Gtk.ToggleButton(label="Fehler", active=True)
+        self._warning_toggle = Gtk.ToggleButton(label=tr("Warnung"), active=True)
+        self._error_toggle = Gtk.ToggleButton(label=tr("Fehler"), active=True)
         self._debug_toggle = Gtk.ToggleButton(label="Debug", active=False)
 
         linked = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
@@ -100,7 +102,7 @@ class LogWindow(Adw.Window):
         box.append(linked)
 
         if self._pair is not None:
-            self._only_pair_toggle = Gtk.ToggleButton(label="Nur dieses Paar", active=True)
+            self._only_pair_toggle = Gtk.ToggleButton(label=tr("Nur dieses Paar"), active=True)
             self._only_pair_toggle.connect("toggled", lambda _t: self.reload())
             box.append(self._only_pair_toggle)
         else:
@@ -109,7 +111,7 @@ class LogWindow(Adw.Window):
         spacer = Gtk.Box(hexpand=True)
         box.append(spacer)
 
-        self._search_entry = Gtk.SearchEntry(placeholder_text="Filtern…")
+        self._search_entry = Gtk.SearchEntry(placeholder_text=tr("Filtern…"))
         self._search_entry.set_size_request(220, -1)
         self._search_entry.connect("search-changed", lambda _e: self.reload())
         box.append(self._search_entry)
@@ -205,15 +207,15 @@ class LogWindow(Adw.Window):
         if not entries:
             buffer.insert(
                 buffer.get_end_iter(),
-                "Keine Eintraege fuer die gewaehlten Filter.\n",
+                tr("Keine Eintraege fuer die gewaehlten Filter.\n"),
             )
-            self._count_label.set_label("0 Eintraege")
+            self._count_label.set_label(tr("0 Eintraege"))
             return
 
         for entry in entries:
             self._append_entry(buffer, entry)
 
-        self._count_label.set_label(f"{len(entries)} Eintraege")
+        self._count_label.set_label(tr("{0} Eintraege").format(len(entries)))
         end_mark = buffer.create_mark(None, buffer.get_end_iter(), False)
         self._text_view.scroll_to_mark(end_mark, 0.0, False, 0.0, 1.0)
 
@@ -221,7 +223,7 @@ class LogWindow(Adw.Window):
         """Haengt einen Eintrag formatiert an."""
         level = str(entry.get("level", "INFO"))
         tag = _LEVEL_TAGS.get(level, "info")
-        label = _LEVEL_LABELS.get(level, level)
+        label = tr(_LEVEL_LABELS.get(level, level))
 
         buffer.insert_with_tags_by_name(
             buffer.get_end_iter(), f"{_format_ts(entry.get('ts'))}  ", "timestamp"

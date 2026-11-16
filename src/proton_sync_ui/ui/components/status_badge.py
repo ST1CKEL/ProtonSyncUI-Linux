@@ -6,6 +6,8 @@ from enum import StrEnum
 
 import gi
 
+from ...i18n import tr
+
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 from gi.repository import Gtk  # noqa: E402
@@ -58,21 +60,21 @@ class StatusBadge(Gtk.Label):
         cls, status: RunStatus | None, *, is_running: bool = False, enabled: bool = True
     ) -> StatusBadge:
         if is_running:
-            return cls("Synchronisiert…", BadgeState.RUNNING)
+            return cls(tr("Synchronisiert…"), BadgeState.RUNNING)
         if not enabled:
-            return cls("Deaktiviert", BadgeState.PAUSED)
+            return cls(tr("Deaktiviert"), BadgeState.PAUSED)
         if status is None:
-            return cls("Bereit", BadgeState.NEUTRAL)
+            return cls(tr("Bereit"), BadgeState.NEUTRAL)
 
         match status:
             case RunStatus.SUCCESS:
-                return cls("Aktuell", BadgeState.SUCCESS)
+                return cls(tr("Aktuell"), BadgeState.SUCCESS)
             case RunStatus.WARNING:
-                return cls("Warnung", BadgeState.WARNING)
+                return cls(tr("Warnung"), BadgeState.WARNING)
             case RunStatus.ERROR:
-                return cls("Fehler", BadgeState.ERROR)
+                return cls(tr("Fehler"), BadgeState.ERROR)
             case RunStatus.CANCELLED:
-                return cls("Abgebrochen", BadgeState.PAUSED)
+                return cls(tr("Abgebrochen"), BadgeState.PAUSED)
             case _:
                 return cls(status.value, BadgeState.NEUTRAL)
 

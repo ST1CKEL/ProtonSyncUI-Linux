@@ -7,6 +7,8 @@ from pathlib import Path
 
 import gi
 
+from ..i18n import tr
+
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 
@@ -57,18 +59,18 @@ class PairDialog(Adw.Dialog):
         self._on_save = on_save
         self._local_path: Path | None = pair.local_path if pair else None
 
-        self.set_title("Sync-Paar bearbeiten" if pair else "Sync-Paar hinzufuegen")
+        self.set_title(tr("Sync-Paar bearbeiten") if pair else tr("Sync-Paar hinzufuegen"))
         self.set_content_width(620)
         self.set_content_height(720)
 
         toolbar = Adw.ToolbarView()
         header = Adw.HeaderBar(show_end_title_buttons=False, show_start_title_buttons=False)
 
-        cancel_button = Gtk.Button(label="Abbrechen")
+        cancel_button = Gtk.Button(label=tr("Abbrechen"))
         cancel_button.connect("clicked", lambda _b: self.close())
         header.pack_start(cancel_button)
 
-        self._save_button = Gtk.Button(label="Speichern")
+        self._save_button = Gtk.Button(label=tr("Speichern"))
         self._save_button.add_css_class("suggested-action")
         self._save_button.connect("clicked", self._on_save_clicked)
         header.pack_end(self._save_button)
@@ -95,27 +97,27 @@ class PairDialog(Adw.Dialog):
         page = Adw.PreferencesPage()
 
         # --- Allgemein -------------------------------------------------
-        general = Adw.PreferencesGroup(title="Allgemein")
+        general = Adw.PreferencesGroup(title=tr("Allgemein"))
 
-        self._name_row = Adw.EntryRow(title="Anzeigename")
+        self._name_row = Adw.EntryRow(title=tr("Anzeigename"))
         self._name_row.connect("changed", lambda _r: self._clear_error())
         general.add(self._name_row)
 
         self._mode_row = Adw.ComboRow(
-            title="Synchronisationsmodus",
+            title=tr("Synchronisationsmodus"),
             model=Gtk.StringList.new(
                 [
-                    "2-Wege-Synchronisation (Cloud ⇄ Lokal)",
-                    "Nur Upload (Lokal ➔ Cloud)",
-                    "Nur Download (Cloud ➔ Lokal)",
+                    tr("2-Wege-Synchronisation (Cloud ⇄ Lokal)"),
+                    tr("Nur Upload (Lokal ➔ Cloud)"),
+                    tr("Nur Download (Cloud ➔ Lokal)"),
                 ]
             ),
         )
         general.add(self._mode_row)
 
         self._enabled_row = Adw.SwitchRow(
-            title="Aktiviert",
-            subtitle="Deaktivierte Paare laufen weder manuell noch per Zeitplan.",
+            title=tr("Aktiviert"),
+            subtitle=tr("Deaktivierte Paare laufen weder manuell noch per Zeitplan."),
             active=True,
         )
         general.add(self._enabled_row)
@@ -123,33 +125,37 @@ class PairDialog(Adw.Dialog):
 
         # --- Ordner-Pfade ----------------------------------------------
         location = Adw.PreferencesGroup(
-            title="Ordner-Pfade",
+            title=tr("Ordner-Pfade"),
             description=(
-                "Lokaler Ordner und zugehoeriger Ordner bei Proton Drive. "
-                "Dateien bei Proton Drive werden niemals geloescht."
+                tr(
+                    "Lokaler Ordner und zugehoeriger Ordner bei Proton Drive. "
+                    "Dateien bei Proton Drive werden niemals geloescht."
+                )
             ),
         )
 
         self._local_row = Adw.ActionRow(
-            title="Lokaler Ordner",
-            subtitle="Noch nichts ausgewaehlt",
+            title=tr("Lokaler Ordner"),
+            subtitle=tr("Noch nichts ausgewaehlt"),
         )
-        choose_button = Gtk.Button(label="Auswaehlen…", valign=Gtk.Align.CENTER)
+        choose_button = Gtk.Button(label=tr("Auswaehlen…"), valign=Gtk.Align.CENTER)
         choose_button.connect("clicked", self._choose_folder)
         self._local_row.add_suffix(choose_button)
         self._local_row.set_activatable_widget(choose_button)
         location.add(self._local_row)
 
-        self._remote_row = Adw.EntryRow(title="Proton-Drive-Pfad")
+        self._remote_row = Adw.EntryRow(title=tr("Proton-Drive-Pfad"))
         self._remote_row.set_text(f"{DEFAULT_REMOTE_ROOT}/")
         self._remote_row.connect("changed", self._on_remote_changed)
         location.add(self._remote_row)
 
         hint = Adw.ActionRow(
-            title="Hinweis zum Proton-Drive-Pfad",
+            title=tr("Hinweis zum Proton-Drive-Pfad"),
             subtitle=(
-                f"Absoluter Pfad, z. B. {DEFAULT_REMOTE_ROOT}/Dokumente. "
-                "Fehlende Ordner werden automatisch angelegt."
+                tr(
+                    "Absoluter Pfad, z. B. {0}/Dokumente. Fehlende Ordner werden "
+                    "automatisch angelegt."
+                ).format(DEFAULT_REMOTE_ROOT)
             ),
         )
         hint.add_css_class("property")
@@ -158,15 +164,15 @@ class PairDialog(Adw.Dialog):
 
         # --- Zeitplan ---------------------------------------------------
         schedule = Adw.PreferencesGroup(
-            title="Zeitplan",
+            title=tr("Zeitplan"),
             description=(
-                "Bei einem Intervall wird ein systemd-Timer im Benutzerkontext eingerichtet."
+                tr("Bei einem Intervall wird ein systemd-Timer im Benutzerkontext eingerichtet.")
             ),
         )
 
         self._schedule_row = Adw.ComboRow(
-            title="Ausloesung",
-            model=Gtk.StringList.new(["Manuell", "Alle X Minuten"]),
+            title=tr("Ausloesung"),
+            model=Gtk.StringList.new([tr("Manuell"), tr("Alle X Minuten")]),
         )
         self._schedule_row.connect("notify::selected", self._on_schedule_changed)
         schedule.add(self._schedule_row)
@@ -174,7 +180,7 @@ class PairDialog(Adw.Dialog):
         self._interval_row = Adw.SpinRow.new_with_range(
             MIN_INTERVAL_MINUTES, MAX_INTERVAL_MINUTES, 5
         )
-        self._interval_row.set_title("Intervall in Minuten")
+        self._interval_row.set_title(tr("Intervall in Minuten"))
         self._interval_row.set_value(60)
         schedule.add(self._interval_row)
         page.add(schedule)
@@ -183,15 +189,15 @@ class PairDialog(Adw.Dialog):
         filters = Adw.PreferencesGroup(title="Filter")
 
         self._size_limit_row = Adw.SwitchRow(
-            title="Groessenlimit pro Datei",
-            subtitle="Groessere Dateien werden uebersprungen und protokolliert.",
+            title=tr("Groessenlimit pro Datei"),
+            subtitle=tr("Groessere Dateien werden uebersprungen und protokolliert."),
             active=False,
         )
         self._size_limit_row.connect("notify::active", self._on_size_limit_toggled)
         filters.add(self._size_limit_row)
 
         self._size_row = Adw.SpinRow.new_with_range(1, 1024 * 100, 1)
-        self._size_row.set_title("Limit in MiB")
+        self._size_row.set_title(tr("Limit in MiB"))
         self._size_row.set_value(512)
         self._size_row.set_sensitive(False)
         filters.add(self._size_row)
@@ -199,8 +205,8 @@ class PairDialog(Adw.Dialog):
 
         # --- Ausschlussregeln --------------------------------------------
         excludes = Adw.PreferencesGroup(
-            title="Ausschlussregeln",
-            description=_EXCLUDE_HELP,
+            title=tr("Ausschlussregeln"),
+            description=tr(_EXCLUDE_HELP),
         )
         self._exclude_view = Gtk.TextView(
             monospace=True,
@@ -228,7 +234,7 @@ class PairDialog(Adw.Dialog):
 
     def _choose_folder(self, _button: Gtk.Button) -> None:
         """Oeffnet die GTK-Ordnerauswahl."""
-        dialog = Gtk.FileDialog(title="Lokalen Quellordner waehlen", modal=True)
+        dialog = Gtk.FileDialog(title=tr("Lokalen Quellordner waehlen"), modal=True)
         if self._local_path is not None and self._local_path.is_dir():
             dialog.set_initial_folder(Gio.File.new_for_path(str(self._local_path)))
         else:
@@ -245,7 +251,7 @@ class PairDialog(Adw.Dialog):
             return
         path = folder.get_path()
         if path is None:
-            self._show_error("Der gewaehlte Ort liegt nicht im lokalen Dateisystem.")
+            self._show_error(tr("Der gewaehlte Ort liegt nicht im lokalen Dateisystem."))
             return
         try:
             self._local_path = validate_local_path(path)
@@ -285,7 +291,7 @@ class PairDialog(Adw.Dialog):
     def _on_save_clicked(self, _button: Gtk.Button) -> None:
         """Validiert die Eingaben und meldet das fertige Paar."""
         if self._local_path is None:
-            self._show_error("Bitte einen lokalen Quellordner auswaehlen.")
+            self._show_error(tr("Bitte einen lokalen Quellordner auswaehlen."))
             return
 
         buffer = self._exclude_view.get_buffer()

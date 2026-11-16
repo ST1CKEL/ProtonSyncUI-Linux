@@ -9,12 +9,14 @@ from datetime import UTC, datetime, timedelta
 
 import gi
 
+from ..i18n import tr
+
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 
 from gi.repository import Adw, Gio, GLib  # noqa: E402
 
-from .. import APP_ID, APP_TITLE, __version__, paths, settings  # noqa: E402
+from .. import APP_ID, APP_TITLE, __version__, i18n, paths, settings  # noqa: E402
 from ..logging_setup import configure_logging, get_logger  # noqa: E402
 from ..storage.database import connect  # noqa: E402
 from ..storage.repository import Repository  # noqa: E402
@@ -53,7 +55,7 @@ class ProtonSyncUIApplication(Adw.Application):
         self._update_timer_id = 0
 
         self.set_option_context_summary(
-            "Synchronisation und Backups mit Proton Drive ueber die offizielle CLI."
+            tr("Synchronisation und Backups mit Proton Drive ueber die offizielle CLI.")
         )
         self.add_main_option(
             "minimized",
@@ -250,6 +252,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     """Startet die grafische Oberflaeche."""
     arguments = list(sys.argv) if argv is None else ["proton-sync-ui-gui", *argv]
 
+    i18n.init()
     GLib.set_prgname(APP_ID)
     GLib.set_application_name(APP_TITLE)
 

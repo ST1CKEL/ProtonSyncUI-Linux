@@ -26,6 +26,7 @@ from pathlib import Path
 from typing import Any, Final
 
 from . import __version__
+from .i18n import tr
 from .logging_setup import get_logger
 
 log = get_logger("update")
@@ -90,14 +91,14 @@ def is_newer(candidate: str, current: str) -> bool:
 def _fetch(url: str, *, timeout: float, limit: int = 2 * 1024 * 1024) -> bytes:
     """Laedt eine HTTPS-Ressource mit Groessenbegrenzung."""
     if not url.startswith("https://"):
-        raise UpdateError(f"Unsichere Adresse abgelehnt: {url}")
+        raise UpdateError(tr("Unsichere Adresse abgelehnt: {0}").format(url))
     request = urllib.request.Request(  # noqa: S310 -- Schema oben geprueft
         url, headers={"User-Agent": _USER_AGENT, "Accept": "application/vnd.github+json"}
     )
     with urllib.request.urlopen(request, timeout=timeout) as response:  # noqa: S310
         data: bytes = response.read(limit + 1)
     if len(data) > limit:
-        raise UpdateError("Die Antwort des Servers ist unerwartet gross.")
+        raise UpdateError(tr("Die Antwort des Servers ist unerwartet gross."))
     return data
 
 
@@ -127,10 +128,10 @@ def check_for_update(*, timeout: float = 15.0, fetch: Any = None) -> UpdateInfo:
     try:
         text = fetcher(BRANCH_VERSION_URL, timeout=timeout).decode("utf-8", errors="replace")
     except (OSError, UpdateError) as error:
-        raise UpdateError(f"Die Update-Suche ist fehlgeschlagen: {error}") from error
+        raise UpdateError(tr("Die Update-Suche ist fehlgeschlagen: {0}").format(error)) from error
     match = _VERSION_RE.search(text)
     if match is None:
-        raise UpdateError("Die Versionsnummer im Repository konnte nicht gelesen werden.")
+        raise UpdateError(tr("Die Versionsnummer im Repository konnte nicht gelesen werden."))
     return UpdateInfo(
         current_version=__version__,
         latest_version=match.group(1),
@@ -145,7 +146,7 @@ def _find_installer(root: Path) -> Path:
     for candidate in candidates:
         if candidate.is_file() and (candidate.parent / "src" / "proton_sync_ui").is_dir():
             return candidate
-    raise UpdateError("Das heruntergeladene Archiv enthaelt kein gueltiges install.sh.")
+    raise UpdateError(tr("Das heruntergeladene Archiv enthaelt kein gueltiges install.sh."))
 
 
 def install_update(
@@ -166,19 +167,21 @@ def install_update(
 
     bash = shutil.which("bash")
     if bash is None:
-        raise UpdateError("'bash' wurde nicht gefunden; das Update kann nicht installiert werden.")
+        raise UpdateError(
+            tr("'bash' wurde nicht gefunden; das Update kann nicht installiert werden.")
+        )
 
     with tempfile.TemporaryDirectory(prefix="proton-sync-ui-update-") as workdir:
         work = Path(workdir)
-        note(f"Lade Version {info.latest_version} herunter …")
+        note(tr("Lade Version {0} herunter …").format(info.latest_version))
         try:
             archive_bytes = _fetch(info.archive_url, timeout=timeout, limit=_MAX_ARCHIVE_BYTES)
         except (OSError, UpdateError) as error:
-            raise UpdateError(f"Der Download ist fehlgeschlagen: {error}") from error
+            raise UpdateError(tr("Der Download ist fehlgeschlagen: {0}").format(error)) from error
         archive = work / "source.tar.gz"
         archive.write_bytes(archive_bytes)
 
-        note("Entpacke Archiv …")
+        note(tr("Entpacke Archiv …"))
         target = work / "source"
         target.mkdir()
         try:
@@ -187,10 +190,12 @@ def install_update(
                 # und Links, die aus dem Zielordner herausfuehren.
                 tar.extractall(target, filter="data")
         except (tarfile.TarError, OSError) as error:
-            raise UpdateError(f"Das Archiv konnte nicht entpackt werden: {error}") from error
+            raise UpdateError(
+                tr("Das Archiv konnte nicht entpackt werden: {0}").format(error)
+            ) from error
 
         installer = _find_installer(target)
-        note("Installiere …")
+        note(tr("Installiere …"))
         try:
             result = subprocess.run(  # noqa: S603 -- feste Argumentliste, keine Shell
                 [bash, str(installer), "--yes", "--no-deps"],
@@ -201,14 +206,18 @@ def install_update(
                 cwd=str(installer.parent),
             )
         except (OSError, subprocess.TimeoutExpired) as error:
-            raise UpdateError(f"Die Installation ist fehlgeschlagen: {error}") from error
+            raise UpdateError(
+                tr("Die Installation ist fehlgeschlagen: {0}").format(error)
+            ) from error
 
         output = (result.stdout + result.stderr).strip()
         if result.returncode != 0:
             tail = "\n".join(output.splitlines()[-12:])
-            raise UpdateError(f"Die Installation endete mit Code {result.returncode}:\n{tail}")
+            raise UpdateError(
+                tr("Die Installation endete mit Code {0}:\n{1}").format(result.returncode, tail)
+            )
 
-    note(f"Version {info.latest_version} wurde installiert.")
+    note(tr("Version {0} wurde installiert.").format(info.latest_version))
     return output
 
 

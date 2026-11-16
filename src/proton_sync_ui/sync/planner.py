@@ -9,6 +9,7 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping
 from pathlib import Path, PurePosixPath
 
+from ..i18n import tr
 from ..logging_setup import get_logger
 from ..models.plan import PlanAction, PlanItem, SyncPlan, UploadPlan
 from ..models.sync_pair import SyncMode, SyncPair
@@ -94,7 +95,9 @@ def build_plan(
                     action=PlanAction.SKIP_REMOTE_UNKNOWN,
                     size_bytes=size,
                     mtime_ns=local.mtime_ns if local else 0,
-                    reason="Cloud-Ordner konnte nicht gelesen werden; Datei wird zurueckgestellt.",
+                    reason=tr(
+                        "Cloud-Ordner konnte nicht gelesen werden; Datei wird zurueckgestellt."
+                    ),
                 )
             )
             continue
@@ -150,7 +153,7 @@ def _plan_upload_only(
                     relative_path=rel_path,
                     action=PlanAction.LOCAL_DELETED,
                     size_bytes=state.size_bytes,
-                    reason="Lokal geloescht (Kopie bei Proton Drive bleibt bestehen).",
+                    reason=tr("Lokal geloescht (Kopie bei Proton Drive bleibt bestehen)."),
                 )
             )
             return
@@ -163,7 +166,7 @@ def _plan_upload_only(
                     relative_path=rel_path,
                     action=PlanAction.LOCAL_DELETED,
                     size_bytes=state.size_bytes,
-                    reason="Lokal geloescht (Kopie bei Proton Drive bleibt bestehen).",
+                    reason=tr("Lokal geloescht (Kopie bei Proton Drive bleibt bestehen)."),
                 )
             )
         return
@@ -176,7 +179,7 @@ def _plan_upload_only(
                 size_bytes=local.size_bytes,
                 mtime_ns=local.mtime_ns,
                 remote_path=pair.remote_path_for(rel_path),
-                reason="Noch nicht hochgeladen.",
+                reason=tr("Noch nicht hochgeladen."),
             )
         )
         return
@@ -189,7 +192,9 @@ def _plan_upload_only(
                 size_bytes=local.size_bytes,
                 mtime_ns=local.mtime_ns,
                 remote_path=pair.remote_path_for(rel_path),
-                reason=f"Groesse geaendert: {state.size_bytes} -> {local.size_bytes} Bytes.",
+                reason=tr("Groesse geaendert: {0} -> {1} Bytes.").format(
+                    state.size_bytes, local.size_bytes
+                ),
             )
         )
         return
@@ -202,7 +207,7 @@ def _plan_upload_only(
                 size_bytes=local.size_bytes,
                 mtime_ns=local.mtime_ns,
                 remote_path=pair.remote_path_for(rel_path),
-                reason="Unveraendert.",
+                reason=tr("Unveraendert."),
             )
         )
         return
@@ -230,7 +235,7 @@ def _plan_download_only(
                     action=PlanAction.SKIP_UNCHANGED,
                     size_bytes=local.size_bytes,
                     mtime_ns=local.mtime_ns,
-                    reason="Nur lokal vorhanden (Download-Modus).",
+                    reason=tr("Nur lokal vorhanden (Download-Modus)."),
                 )
             )
         return
@@ -243,7 +248,7 @@ def _plan_download_only(
                 size_bytes=remote.size_bytes,
                 remote_path=remote.remote_path,
                 remote_mtime=remote.modification_time,
-                reason="In der Cloud neu vorhanden.",
+                reason=tr("In der Cloud neu vorhanden."),
             )
         )
         return
@@ -258,7 +263,7 @@ def _plan_download_only(
                     mtime_ns=local.mtime_ns,
                     remote_path=remote.remote_path,
                     remote_mtime=remote.modification_time,
-                    reason="Beidseitig vorhanden mit gleicher Groesse.",
+                    reason=tr("Beidseitig vorhanden mit gleicher Groesse."),
                     record_initial_state=True,
                 )
             )
@@ -272,8 +277,10 @@ def _plan_download_only(
                     remote_path=remote.remote_path,
                     remote_mtime=remote.modification_time,
                     reason=(
-                        "Initialer Abgleich mit abweichender Groesse: lokale Fassung wird "
-                        "gesichert, Cloud-Fassung uebernommen."
+                        tr(
+                            "Initialer Abgleich mit abweichender Groesse: lokale Fassung wird "
+                            "gesichert, Cloud-Fassung uebernommen."
+                        )
                     ),
                 )
             )
@@ -294,9 +301,9 @@ def _plan_download_only(
                 remote_path=remote.remote_path,
                 remote_mtime=remote.modification_time,
                 reason=(
-                    "In der Cloud und lokal geaendert: lokale Fassung wird gesichert."
+                    tr("In der Cloud und lokal geaendert: lokale Fassung wird gesichert.")
                     if local_changed
-                    else "In der Cloud geaendert."
+                    else tr("In der Cloud geaendert.")
                 ),
             )
         )
@@ -310,7 +317,7 @@ def _plan_download_only(
             mtime_ns=local.mtime_ns,
             remote_path=remote.remote_path,
             remote_mtime=remote.modification_time,
-            reason="Lokal und remote synchron.",
+            reason=tr("Lokal und remote synchron."),
             needs_remote_mtime_refresh=_remote_mtime_missing(state, remote),
         )
     )
@@ -341,7 +348,7 @@ def _plan_bidirectional(
                     size_bytes=local.size_bytes,
                     mtime_ns=local.mtime_ns,
                     remote_path=pair.remote_path_for(rel_path),
-                    reason="Lokal neu angelegt.",
+                    reason=tr("Lokal neu angelegt."),
                 )
             )
         elif state.size_bytes == local.size_bytes and state.mtime_ns == local.mtime_ns:
@@ -352,7 +359,7 @@ def _plan_bidirectional(
                     size_bytes=local.size_bytes,
                     mtime_ns=local.mtime_ns,
                     remote_path=pair.remote_path_for(rel_path),
-                    reason="Lokal unveraendert.",
+                    reason=tr("Lokal unveraendert."),
                 )
             )
         elif state.size_bytes != local.size_bytes:
@@ -363,7 +370,11 @@ def _plan_bidirectional(
                     size_bytes=local.size_bytes,
                     mtime_ns=local.mtime_ns,
                     remote_path=pair.remote_path_for(rel_path),
-                    reason=(f"Groesse geaendert: {state.size_bytes} -> {local.size_bytes} Bytes."),
+                    reason=(
+                        tr("Groesse geaendert: {0} -> {1} Bytes.").format(
+                            state.size_bytes, local.size_bytes
+                        )
+                    ),
                 )
             )
         else:
@@ -380,7 +391,7 @@ def _plan_bidirectional(
                     size_bytes=remote.size_bytes,
                     remote_path=remote.remote_path,
                     remote_mtime=remote.modification_time,
-                    reason="In der Cloud neu vorhanden.",
+                    reason=tr("In der Cloud neu vorhanden."),
                 )
             )
         elif state.deleted:
@@ -392,7 +403,7 @@ def _plan_bidirectional(
                         size_bytes=remote.size_bytes,
                         remote_path=remote.remote_path,
                         remote_mtime=remote.modification_time,
-                        reason="Nach der lokalen Loeschung in der Cloud geaendert.",
+                        reason=tr("Nach der lokalen Loeschung in der Cloud geaendert."),
                     )
                 )
             else:
@@ -403,7 +414,7 @@ def _plan_bidirectional(
                         size_bytes=remote.size_bytes,
                         remote_path=remote.remote_path,
                         remote_mtime=remote.modification_time,
-                        reason="Lokal geloescht; die Cloud-Kopie bleibt erhalten.",
+                        reason=tr("Lokal geloescht; die Cloud-Kopie bleibt erhalten."),
                     )
                 )
         else:
@@ -414,7 +425,7 @@ def _plan_bidirectional(
                     size_bytes=remote.size_bytes,
                     remote_path=remote.remote_path,
                     remote_mtime=remote.modification_time,
-                    reason="Lokal geloescht (Cloud-Kopie bleibt unberuehrt).",
+                    reason=tr("Lokal geloescht (Cloud-Kopie bleibt unberuehrt)."),
                     keep_tombstone=True,
                 )
             )
@@ -428,7 +439,7 @@ def _plan_bidirectional(
                     relative_path=rel_path,
                     action=PlanAction.LOCAL_DELETED,
                     size_bytes=state.size_bytes,
-                    reason="Datei existiert weder lokal noch remote.",
+                    reason=tr("Datei existiert weder lokal noch remote."),
                 )
             )
         return
@@ -446,7 +457,7 @@ def _plan_bidirectional(
                     mtime_ns=local.mtime_ns,
                     remote_path=remote.remote_path,
                     remote_mtime=remote.modification_time,
-                    reason="Beidseitig vorhanden mit gleicher Groesse.",
+                    reason=tr("Beidseitig vorhanden mit gleicher Groesse."),
                     record_initial_state=True,
                 )
             )
@@ -462,8 +473,10 @@ def _plan_bidirectional(
                     remote_path=remote.remote_path,
                     remote_mtime=remote.modification_time,
                     reason=(
-                        "Initialer Abgleich mit abweichender Groesse: lokale Fassung wird "
-                        "gesichert, Cloud-Fassung uebernommen."
+                        tr(
+                            "Initialer Abgleich mit abweichender Groesse: lokale Fassung wird "
+                            "gesichert, Cloud-Fassung uebernommen."
+                        )
                     ),
                 )
             )
@@ -484,7 +497,7 @@ def _plan_bidirectional(
                 mtime_ns=local.mtime_ns,
                 remote_path=remote.remote_path,
                 remote_mtime=remote.modification_time,
-                reason="Unveraendert.",
+                reason=tr("Unveraendert."),
                 needs_remote_mtime_refresh=_remote_mtime_missing(state, remote),
             )
         )
@@ -499,7 +512,9 @@ def _plan_bidirectional(
                     size_bytes=local.size_bytes,
                     mtime_ns=local.mtime_ns,
                     remote_path=pair.remote_path_for(rel_path),
-                    reason=f"Groesse geaendert: {state.size_bytes} -> {local.size_bytes} Bytes.",
+                    reason=tr("Groesse geaendert: {0} -> {1} Bytes.").format(
+                        state.size_bytes, local.size_bytes
+                    ),
                 )
             )
         else:
@@ -514,7 +529,7 @@ def _plan_bidirectional(
                 size_bytes=remote.size_bytes,
                 remote_path=remote.remote_path,
                 remote_mtime=remote.modification_time,
-                reason="In der Cloud geaendert.",
+                reason=tr("In der Cloud geaendert."),
             )
         )
         return
@@ -527,7 +542,7 @@ def _plan_bidirectional(
             mtime_ns=local.mtime_ns,
             remote_path=remote.remote_path,
             remote_mtime=remote.modification_time,
-            reason="Konflikt: Beidseitig geaendert. Lokale Version wird archiviert.",
+            reason=tr("Konflikt: Beidseitig geaendert. Lokale Version wird archiviert."),
         )
     )
 
@@ -562,26 +577,28 @@ def _resolve_ambiguous_local(
             digest: str | None = hasher(absolute_path)
         except OSError as error:
             digest = None
-            errors.append(f"{relative_path}: Pruefsumme nicht berechenbar ({error}).")
+            errors.append(
+                tr("{0}: Pruefsumme nicht berechenbar ({1}).").format(relative_path, error)
+            )
         return PlanItem(
             relative_path=relative_path,
             action=PlanAction.UPLOAD_CHANGED,
             size_bytes=size_bytes,
             mtime_ns=mtime_ns,
-            reason="Aenderungszeit abweichend, keine gespeicherte Pruefsumme zum Vergleich.",
+            reason=tr("Aenderungszeit abweichend, keine gespeicherte Pruefsumme zum Vergleich."),
             sha256=digest,
         )
 
     try:
         digest = hasher(absolute_path)
     except OSError as error:
-        errors.append(f"{relative_path}: Pruefsumme nicht berechenbar ({error}).")
+        errors.append(tr("{0}: Pruefsumme nicht berechenbar ({1}).").format(relative_path, error))
         return PlanItem(
             relative_path=relative_path,
             action=PlanAction.SKIP_UNREADABLE,
             size_bytes=size_bytes,
             mtime_ns=mtime_ns,
-            reason=f"Pruefsumme nicht berechenbar: {error}",
+            reason=tr("Pruefsumme nicht berechenbar: {0}").format(error),
         )
 
     if digest == state.sha256:
@@ -590,7 +607,7 @@ def _resolve_ambiguous_local(
             action=PlanAction.SKIP_UNCHANGED,
             size_bytes=size_bytes,
             mtime_ns=mtime_ns,
-            reason="Aenderungszeit abweichend, Inhalt laut Pruefsumme identisch.",
+            reason=tr("Aenderungszeit abweichend, Inhalt laut Pruefsumme identisch."),
             sha256=digest,
             needs_mtime_refresh=True,
         )
@@ -600,7 +617,7 @@ def _resolve_ambiguous_local(
         action=PlanAction.UPLOAD_CHANGED,
         size_bytes=size_bytes,
         mtime_ns=mtime_ns,
-        reason="Inhalt laut Pruefsumme geaendert.",
+        reason=tr("Inhalt laut Pruefsumme geaendert."),
         sha256=digest,
     )
 

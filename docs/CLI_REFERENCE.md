@@ -36,6 +36,7 @@ proton-sync-ui [OPTIONEN] BEFEHL [ARGUMENTE...]
 | `systemd remove` | Entfernt alle ProtonSyncUI systemd-Timer und Services. |
 | `logs` | Gibt die neuesten Einträge aus der Protokolldatei aus. |
 | `autostart on\|off\|status` | Schaltet den Start bei der Anmeldung (`--window`: mit sichtbarem Fenster). |
+| `cli-update [--check]` | Installiert bzw. aktualisiert die offizielle Proton-Drive-CLI von proton.me (SHA-512 geprüft). |
 | `update [--check]` | Sucht nach einer neuen Version und installiert sie (`--check`: nur prüfen). |
 | `doctor` | Prüft CLI, Anmeldung, systemd und Datenbank. |
 

@@ -17,6 +17,7 @@ from ..cli_adapter.errors import (
     ProtonCliNotFoundError,
     RemotePathNotFoundError,
 )
+from ..i18n import tr
 from ..logging_setup import get_logger
 from ..models.plan import PlanAction
 from ..models.sync_pair import name_is_supported
@@ -156,7 +157,7 @@ async def scan_remote_directory(
                         ScanSkip(
                             relative_path=relative,
                             action=PlanAction.SKIP_UNSUPPORTED_NAME,
-                            reason="Name enthaelt nicht unterstuetzte Zeichen.",
+                            reason=tr("Name enthaelt nicht unterstuetzte Zeichen."),
                         )
                     )
                     continue
@@ -168,7 +169,7 @@ async def scan_remote_directory(
                             ScanSkip(
                                 relative_path=relative,
                                 action=PlanAction.SKIP_EXCLUDED,
-                                reason="Entfernter Ordner durch Ausschlussregel ausgenommen.",
+                                reason=tr("Entfernter Ordner durch Ausschlussregel ausgenommen."),
                             )
                         )
                         continue
@@ -181,8 +182,10 @@ async def scan_remote_directory(
                             relative_path=relative,
                             action=PlanAction.SKIP_DOCS_SHEETS,
                             reason=(
-                                "Proton Docs und Sheets koennen nicht ueber die CLI "
-                                "heruntergeladen werden."
+                                tr(
+                                    "Proton Docs und Sheets koennen nicht ueber die CLI "
+                                    "heruntergeladen werden."
+                                )
                             ),
                         )
                     )
@@ -193,7 +196,7 @@ async def scan_remote_directory(
                         ScanSkip(
                             relative_path=relative,
                             action=PlanAction.SKIP_EXCLUDED,
-                            reason="Durch Ausschlussregel ausgenommen.",
+                            reason=tr("Durch Ausschlussregel ausgenommen."),
                         )
                     )
                     continue
@@ -203,7 +206,7 @@ async def scan_remote_directory(
                         ScanSkip(
                             relative_path=relative,
                             action=PlanAction.SKIP_TOO_LARGE,
-                            reason="Dateigroesse ueberschreitet Limit.",
+                            reason=tr("Dateigroesse ueberschreitet Limit."),
                             size_bytes=node.size_bytes,
                         )
                     )

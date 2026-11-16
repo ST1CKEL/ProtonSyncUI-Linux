@@ -38,6 +38,12 @@ def isolated_xdg(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     home = tmp_path / "home"
     home.mkdir(exist_ok=True)
     monkeypatch.setenv("HOME", str(home))
+
+    # Die Tests pruefen deutsche Texte -- unabhaengig von der Sitzungssprache.
+    from proton_sync_ui import i18n
+
+    monkeypatch.setenv(i18n.ENVIRONMENT_VARIABLE, "de")
+    i18n.set_language("de")
     return base
 
 

@@ -6,6 +6,8 @@ from typing import TYPE_CHECKING
 
 import gi
 
+from ...i18n import tr
+
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 from gi.repository import Adw, Gdk, Gtk  # noqa: E402
@@ -33,24 +35,24 @@ class DiagnosticsView(Gtk.Box):
 
         # 1. System & Diagnose
         diag_group = Adw.PreferencesGroup(
-            title="Systemdiagnose",
-            description="Ueberpruefe Hintergrunddienste und Systemd-Timer.",
+            title=tr("Systemdiagnose"),
+            description=tr("Ueberpruefe Hintergrunddienste und Systemd-Timer."),
         )
 
         sync_systemd_row = Adw.ActionRow(
-            title="Systemd-Timer abgleichen",
-            subtitle="Richtet Hintergrund-Timer fuer alle konfigurierten Intervalle ein.",
+            title=tr("Systemd-Timer abgleichen"),
+            subtitle=tr("Richtet Hintergrund-Timer fuer alle konfigurierten Intervalle ein."),
         )
-        sync_systemd_btn = Gtk.Button(label="Timer aktualisieren", css_classes=["flat"])
+        sync_systemd_btn = Gtk.Button(label=tr("Timer aktualisieren"), css_classes=["flat"])
         sync_systemd_btn.connect("clicked", lambda _: self._window.sync_systemd_units())
         sync_systemd_row.add_suffix(sync_systemd_btn)
         diag_group.add(sync_systemd_row)
 
         copy_report_row = Adw.ActionRow(
-            title="Diagnosebericht erstellen",
-            subtitle="Kopiert System-, Versions- und Statusinformationen fuer Support.",
+            title=tr("Diagnosebericht erstellen"),
+            subtitle=tr("Kopiert System-, Versions- und Statusinformationen fuer Support."),
         )
-        copy_report_btn = Gtk.Button(label="Bericht kopieren", css_classes=["flat"])
+        copy_report_btn = Gtk.Button(label=tr("Bericht kopieren"), css_classes=["flat"])
         copy_report_btn.connect("clicked", lambda _: self._copy_diagnostics())
         copy_report_row.add_suffix(copy_report_btn)
         diag_group.add(copy_report_row)
@@ -58,26 +60,28 @@ class DiagnosticsView(Gtk.Box):
 
         # 2. Protokolle
         log_group = Adw.PreferencesGroup(
-            title="Protokolle und Logs",
-            description="Detailprotokolle der Hintergrundprozesse.",
+            title=tr("Protokolle und Logs"),
+            description=tr("Detailprotokolle der Hintergrundprozesse."),
         )
         log_row = Adw.ActionRow(
-            title="Logdatei oeffnen",
+            title=tr("Logdatei oeffnen"),
             subtitle=str(log_file_path()),
         )
-        view_log_btn = Gtk.Button(label="Log anzeigen", css_classes=["flat"])
+        view_log_btn = Gtk.Button(label=tr("Log anzeigen"), css_classes=["flat"])
         view_log_btn.connect("clicked", lambda _: self._window.show_log())
         log_row.add_suffix(view_log_btn)
         log_group.add(log_row)
         page.add(log_group)
 
         # 3. Ueber die App
-        about_group = Adw.PreferencesGroup(title="Ueber ProtonSyncUI")
+        about_group = Adw.PreferencesGroup(title=tr("Ueber ProtonSyncUI"))
         about_row = Adw.ActionRow(
             title=f"{APP_TITLE} {__version__}",
-            subtitle="2-Wege-Synchronisation mit Proton Drive · entwickelt von Stickelbroeck Labs",
+            subtitle=tr(
+                "2-Wege-Synchronisation mit Proton Drive · entwickelt von Stickelbroeck Labs"
+            ),
         )
-        about_btn = Gtk.Button(label="Info & Lizenz", css_classes=["flat"])
+        about_btn = Gtk.Button(label=tr("Info & Lizenz"), css_classes=["flat"])
         about_btn.connect("clicked", lambda _: self._window.show_about())
         about_row.add_suffix(about_btn)
         about_group.add(about_row)
@@ -98,7 +102,7 @@ class DiagnosticsView(Gtk.Box):
             clipboard = display.get_clipboard()
             if clipboard:
                 clipboard.set(report)
-                self._window.toast("Diagnosebericht in Zwischenablage kopiert.")
+                self._window.toast(tr("Diagnosebericht in Zwischenablage kopiert."))
 
 
 __all__ = ["DiagnosticsView"]

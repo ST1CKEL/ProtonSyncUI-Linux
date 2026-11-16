@@ -22,6 +22,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Final
 
+from ..i18n import tr
 from ..logging_setup import get_logger
 from .database import transaction
 
@@ -42,9 +43,10 @@ class PairLockedError(LockError):
         self.pair_uid = pair_uid
         self.holder = holder
         super().__init__(
-            f"Fuer dieses Sync-Paar laeuft bereits ein Durchgang "
-            f"(Prozess {holder.pid}, gestartet {holder.acquired_at:%H:%M:%S}, "
-            f"Quelle: {holder.source})."
+            tr(
+                "Fuer dieses Sync-Paar laeuft bereits ein Durchgang (Prozess {0}, "
+                "gestartet {1:%H:%M:%S}, Quelle: {2})."
+            ).format(holder.pid, holder.acquired_at, holder.source)
         )
 
 

@@ -8,6 +8,8 @@ from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import PurePosixPath
 
+from ..i18n import tr
+
 
 class PlanAction(StrEnum):
     """Was mit einer Datei geschehen soll.
@@ -79,7 +81,7 @@ _ACTION_LABELS: dict[PlanAction, str] = {
 
 def action_label(action: PlanAction) -> str:
     """Deutsche Bezeichnung einer Plan-Aktion fuer die Oberflaeche."""
-    return _ACTION_LABELS.get(action, action.value)
+    return tr(_ACTION_LABELS.get(action, action.value))
 
 
 @dataclass(frozen=True, slots=True)
@@ -257,18 +259,22 @@ class UploadPlan:
         parts: list[str] = []
         if self.downloads:
             parts.append(
-                f"Download: {len(self.new_downloads)} neu, {len(self.changed_downloads)} geaendert"
+                tr("Download: {0} neu, {1} geaendert").format(
+                    len(self.new_downloads), len(self.changed_downloads)
+                )
             )
         if self.uploads:
             parts.append(
-                f"Upload: {len(self.new_uploads)} neu, {len(self.changed_uploads)} geaendert"
+                tr("Upload: {0} neu, {1} geaendert").format(
+                    len(self.new_uploads), len(self.changed_uploads)
+                )
             )
         if not parts:
-            parts.append("Keine Uebertragungen noetig")
+            parts.append(tr("Keine Uebertragungen noetig"))
         if self.skipped:
-            parts.append(f"{len(self.skipped)} uebersprungen")
+            parts.append(tr("{0} uebersprungen").format(len(self.skipped)))
         if self.local_deletions:
-            parts.append(f"{len(self.local_deletions)} lokal geloescht")
+            parts.append(tr("{0} lokal geloescht").format(len(self.local_deletions)))
         return ", ".join(parts)
 
     def __iter__(self) -> Iterator[PlanItem]:

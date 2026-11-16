@@ -16,12 +16,13 @@
   <img src="https://img.shields.io/badge/Tray-StatusNotifierItem-00C2B8?style=flat-square" alt="System Tray Support">
   <img src="https://img.shields.io/badge/Linux-Fedora%20%7C%20Ubuntu%20%7C%20Debian%20%7C%20Arch%20%7C%20openSUSE-51A2DA?style=flat-square&logo=linux&logoColor=white" alt="Linux Distros">
   <img src="https://img.shields.io/badge/License-MIT-green?style=flat-square" alt="License MIT">
-  <img src="https://img.shields.io/badge/Tests-465%20passed-brightgreen?style=flat-square" alt="Tests">
-  <img src="https://img.shields.io/badge/Version-0.3.1-0EA5A8?style=flat-square" alt="Version 0.3.1">
+  <img src="https://img.shields.io/badge/Tests-505%20passed-brightgreen?style=flat-square" alt="Tests">
+  <img src="https://img.shields.io/badge/Version-0.4.0-0EA5A8?style=flat-square" alt="Version 0.4.0">
 </p>
 
 <p align="center">
-  Ein Projekt von <a href="https://stickelbroeck.com"><b>Stickelbroeck Labs</b></a>
+  Ein Projekt von <a href="https://stickelbroeck.com"><b>Stickelbroeck Labs</b></a> ·
+  <b>Deutsch</b> | <a href="README.en.md">English</a>
 </p>
 
 ---
@@ -33,6 +34,9 @@
 - 📥 **System-Tray & Hintergrund-Betrieb**: Läuft im Infobereich über das standardisierte `StatusNotifierItem` & `DBusMenu`-Protokoll (KDE Plasma, GNOME AppIndicator, XFCE, Sway/Waybar). Das Symbol zeigt den Zustand mit farbiger Marke (Sync, Warnung, Fehler) und meldet sich nach einem Neustart der Kontrollleiste selbst wieder an.
 - 🚀 **Autostart bei der Anmeldung**: Startet auf Wunsch mit der Arbeitsfläche, minimiert im Infobereich. Die Installation kommt ohne virtuelle Umgebung aus und übersteht Distributions-Upgrades (z. B. Fedora 44 → 45).
 - ⬆️ **Eingebaute Update-Funktion**: Sucht höchstens einmal täglich nach einer neuen Version und installiert sie nach Bestätigung – in der Oberfläche oder per `proton-sync-ui update`.
+- 🌍 **Deutsch und Englisch**: Die Oberfläche folgt der Sprache des Systems oder der Wahl in den Einstellungen.
+- 🧩 **Proton-Drive-CLI per Klick**: Installiert und aktualisiert die offizielle CLI direkt von proton.me – mit SHA-512-Prüfung, Sicherung der bisherigen Fassung und ohne erneute Anmeldung.
+- 📦 **Grafisches Setup**: Eine einzelne Datei richtet alles ein – Anwendung, Autostart und CLI, ohne Root-Rechte.
 - 🔑 **Anmeldung per Klick**: Ist Proton Drive abgemeldet, weist eine Hinweisleiste darauf hin und startet die Anmeldung der offiziellen CLI.
 - ⏱️ **systemd User-Timer**: Vollständig integrierte, native Hintergrundsynchronisation im Benutzerprofil (`systemd --user`) – zuverlässig, ressourcenschonend und ohne Root-Rechte.
 - ⚖️ **Visuelles Konflikt-Center**: Bei gleichzeitigen Änderungen schützt ProtonSyncUI deine Daten mit 1-Klick-Lösungsstrategien (*Beide behalten*, *Lokal bevorzugen*, *Cloud bevorzugen*).
@@ -141,6 +145,17 @@ Der Planer vergleicht den Zustand des lokalen Dateisystems, den Remote-Zustand a
 
 ## 🚀 Installation & Schnellstart
 
+### Variante A: Setup (empfohlen)
+Das Setup von der [Release-Seite](https://github.com/ST1CKEL/ProtonSyncUI-Linux/releases/latest) laden und starten:
+```bash
+sh ProtonSyncUI-Setup-0.4.0.run
+```
+Ein Fenster führt durch Sprache, Autostart und die Einrichtung der Proton-Drive-CLI. Installiert wird
+ausschließlich in das Benutzerverzeichnis. Ohne grafische Sitzung (oder mit `--text`) läuft dieselbe
+Installation im Terminal.
+
+### Variante B: Aus dem Quelltext
+
 ### 1. Repository klonen
 ```bash
 git clone https://github.com/ST1CKEL/ProtonSyncUI-Linux.git
@@ -183,6 +198,7 @@ proton-sync-ui autostart on     # bei der Anmeldung starten (KDE Plasma, GNOME),
 proton-sync-ui autostart off
 proton-sync-ui update --check   # nach einer neuen Version suchen
 proton-sync-ui update           # neue Version herunterladen und installieren
+proton-sync-ui cli-update       # offizielle Proton-Drive-CLI installieren bzw. aktualisieren
 ```
 Beides lässt sich auch unter *Einstellungen* schalten. Die Update-Suche läuft auf Wunsch einmal
 täglich automatisch; installiert wird erst nach Bestätigung.
@@ -198,7 +214,7 @@ ProtonSyncUI lässt sich auch auf Servern oder in eigenen Skripten steuern:
 proton-sync-ui status
 
 # Synchronisation für ein Paar starten
-proton-sync-ui run <PAIR-UID-ODER-NAME>
+proton-sync-ui sync <PAIR-UID-ODER-NAME>
 
 # Dry-Run (Simulation) ohne Änderungen
 proton-sync-ui dry-run <PAIR-UID-ODER-NAME>
@@ -209,9 +225,12 @@ proton-sync-ui list
 # systemd Timer aktualisieren
 proton-sync-ui systemd sync
 
-# Aktuelle Protokolldatei einsehen
-proton-sync-ui logs
+# Umgebung prüfen (CLI, Anmeldung, systemd, Datenbank)
+proton-sync-ui doctor
 ```
+
+Die Sprache der Oberfläche lässt sich mit `PROTON_SYNC_UI_LANGUAGE=de|en` erzwingen; die Ausgaben der
+Kommandozeile selbst sind deutsch.
 
 ---
 
@@ -246,6 +265,9 @@ ruff format --check .
 
 # Typanalyse
 mypy
+
+# Setup bauen  ->  dist/ProtonSyncUI-Setup-<Version>.run
+tools/build-setup.sh
 ```
 
 ---

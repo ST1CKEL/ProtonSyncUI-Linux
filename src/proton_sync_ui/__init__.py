@@ -9,7 +9,7 @@ dieser Anwendung mit ``proton-drive auth login``.
 
 from __future__ import annotations
 
-__version__ = "0.3.1"
+__version__ = "0.4.0"
 APP_ID = "io.github.protonsyncui.ProtonSyncUI"
 APP_NAME = "proton-sync-ui"
 APP_TITLE = "ProtonSyncUI"

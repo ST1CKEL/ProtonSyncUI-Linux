@@ -6,6 +6,8 @@ from collections.abc import Callable
 
 import gi
 
+from ...i18n import tr
+
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 from gi.repository import Adw, Gtk  # noqa: E402
@@ -25,7 +27,7 @@ class ConflictCard(Adw.ExpanderRow):
         self._on_resolve = on_resolve
 
         self.set_title(conflict.relative_path)
-        self.set_subtitle("Datei wurde sowohl lokal als auch bei Proton Drive geaendert.")
+        self.set_subtitle(tr("Datei wurde sowohl lokal als auch bei Proton Drive geaendert."))
         self.add_prefix(Gtk.Image.new_from_icon_name("emblem-important-symbolic"))
         self.set_expanded(True)
 
@@ -38,10 +40,10 @@ class ConflictCard(Adw.ExpanderRow):
 
         # Lokale Spalte
         local_col = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
-        local_col.append(Gtk.Label(label="Lokale Fassung", css_classes=["heading"], xalign=0))
+        local_col.append(Gtk.Label(label=tr("Lokale Fassung"), css_classes=["heading"], xalign=0))
         local_col.append(
             Gtk.Label(
-                label=f"Groesse: {format_size(conflict.local_size)}",
+                label=tr("Groesse: {0}").format(format_size(conflict.local_size)),
                 css_classes=["caption", "dim-label"],
                 xalign=0,
             )
@@ -51,11 +53,11 @@ class ConflictCard(Adw.ExpanderRow):
         # Cloud Spalte
         remote_col = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
         remote_col.append(
-            Gtk.Label(label="Proton-Drive-Fassung", css_classes=["heading"], xalign=0)
+            Gtk.Label(label=tr("Proton-Drive-Fassung"), css_classes=["heading"], xalign=0)
         )
         remote_col.append(
             Gtk.Label(
-                label=f"Groesse: {format_size(conflict.remote_size)}",
+                label=tr("Groesse: {0}").format(format_size(conflict.remote_size)),
                 css_classes=["caption", "dim-label"],
                 xalign=0,
             )
@@ -69,14 +71,14 @@ class ConflictCard(Adw.ExpanderRow):
         btn_box.set_margin_end(16)
 
         keep_both_btn = Gtk.Button(
-            label="Beide behalten (umbenennen)", css_classes=["suggested-action"]
+            label=tr("Beide behalten (umbenennen)"), css_classes=["suggested-action"]
         )
         keep_both_btn.connect("clicked", lambda _: self._on_resolve(self.conflict, "keep_both"))
 
-        keep_local_btn = Gtk.Button(label="Lokale Fassung behalten")
+        keep_local_btn = Gtk.Button(label=tr("Lokale Fassung behalten"))
         keep_local_btn.connect("clicked", lambda _: self._on_resolve(self.conflict, "keep_local"))
 
-        keep_remote_btn = Gtk.Button(label="Cloud-Fassung behalten")
+        keep_remote_btn = Gtk.Button(label=tr("Cloud-Fassung behalten"))
         keep_remote_btn.connect("clicked", lambda _: self._on_resolve(self.conflict, "keep_remote"))
 
         btn_box.append(keep_both_btn)

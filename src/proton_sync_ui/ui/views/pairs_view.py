@@ -6,6 +6,8 @@ from typing import TYPE_CHECKING
 
 import gi
 
+from ...i18n import tr
+
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 from gi.repository import Adw, Gtk  # noqa: E402
@@ -44,7 +46,7 @@ class SyncPairsView(Gtk.Box):
         # HeaderBar
         header = Adw.HeaderBar()
         add_btn = Gtk.Button(
-            label="Sync-Paar hinzufuegen",
+            label=tr("Sync-Paar hinzufuegen"),
             icon_name="list-add-symbolic",
             css_classes=["suggested-action"],
         )
@@ -60,13 +62,13 @@ class SyncPairsView(Gtk.Box):
         filter_bar.set_margin_end(16)
 
         self._search_entry = Gtk.SearchEntry(
-            placeholder_text="Sync-Paare durchsuchen…", hexpand=True
+            placeholder_text=tr("Sync-Paare durchsuchen…"), hexpand=True
         )
         self._search_entry.connect("search-changed", self._on_search_changed)
         filter_bar.append(self._search_entry)
 
         self._filter_combo = Gtk.DropDown.new_from_strings(
-            ["Alle", "Aktiviert", "Laeuft", "Deaktiviert"]
+            [tr("Alle"), tr("Aktiviert"), tr("Laeuft"), tr("Deaktiviert")]
         )
         self._filter_combo.connect("notify::selected", self._on_filter_changed)
         filter_bar.append(self._filter_combo)
@@ -78,10 +80,12 @@ class SyncPairsView(Gtk.Box):
         # Empty State
         empty_page = Adw.StatusPage(
             icon_name="folder-remote-symbolic",
-            title="Keine Sync-Paare gefunden",
-            description="Lege ein neues Sync-Paar an, um Ordner mit Proton Drive abzugleichen.",
+            title=tr("Keine Sync-Paare gefunden"),
+            description=tr("Lege ein neues Sync-Paar an, um Ordner mit Proton Drive abzugleichen."),
         )
-        empty_btn = Gtk.Button(label="Sync-Paar anlegen", css_classes=["suggested-action", "pill"])
+        empty_btn = Gtk.Button(
+            label=tr("Sync-Paar anlegen"), css_classes=["suggested-action", "pill"]
+        )
         empty_btn.set_halign(Gtk.Align.CENTER)
         empty_btn.connect("clicked", lambda _: self._window.show_add_pair_dialog())
         empty_page.set_child(empty_btn)
@@ -90,7 +94,7 @@ class SyncPairsView(Gtk.Box):
         # Listenansicht
         scroll = Gtk.ScrolledWindow(hscrollbar_policy=Gtk.PolicyType.NEVER)
         clamp = Adw.Clamp(maximum_size=860, tightening_threshold=600)
-        self._group = Adw.PreferencesGroup(title="Konfigurierte Ordnerpaare")
+        self._group = Adw.PreferencesGroup(title=tr("Konfigurierte Ordnerpaare"))
         clamp.set_child(self._group)
         scroll.set_child(clamp)
         self._stack.add_named(scroll, "list")
@@ -163,19 +167,19 @@ class SyncPairsView(Gtk.Box):
 
     def _on_sync_pair(self, pair: SyncPair) -> None:
         self._sync_service.start_sync(pair, dry_run=False)
-        self._window.toast(f"'{pair.name}': Synchronisierung gestartet.")
+        self._window.toast(tr("'{0}': Synchronisierung gestartet.").format(pair.name))
         if pair.uid in self._rows:
             self._rows[pair.uid].set_busy(True)
 
     def _on_dry_run_pair(self, pair: SyncPair) -> None:
         self._sync_service.start_sync(pair, dry_run=True)
-        self._window.toast(f"'{pair.name}': Dry-Run gestartet.")
+        self._window.toast(tr("'{0}': Dry-Run gestartet.").format(pair.name))
         if pair.uid in self._rows:
             self._rows[pair.uid].set_busy(True)
 
     def _on_cancel_pair(self, pair: SyncPair) -> None:
         self._sync_service.cancel_sync(pair.uid)
-        self._window.toast(f"'{pair.name}': Abbruch angefordert.")
+        self._window.toast(tr("'{0}': Abbruch angefordert.").format(pair.name))
 
     def _on_edit_pair(self, pair: SyncPair) -> None:
         self._window.show_edit_pair_dialog(pair)

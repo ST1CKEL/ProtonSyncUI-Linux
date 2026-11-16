@@ -30,7 +30,7 @@ from collections.abc import Coroutine, Sequence
 from datetime import datetime
 from typing import Any, Final
 
-from .. import APP_TITLE, __version__, autostart, paths, update
+from .. import APP_TITLE, __version__, autostart, cli_update, i18n, paths, update
 from ..cli_adapter import capabilities
 from ..cli_adapter.adapter import ProtonDriveAdapter
 from ..logging_setup import configure_logging, get_logger
@@ -521,7 +521,7 @@ def cmd_doctor(args: argparse.Namespace) -> int:
         print(f"     CLI-Version: {caps.cli_version}")
     if caps.sdk_version:
         print(f"     SDK-Version: {caps.sdk_version}")
-    if caps.cli_version and caps.cli_version != capabilities.VERIFIED_CLI_VERSION:
+    if caps.cli_version and caps.cli_version not in capabilities.VERIFIED_CLI_VERSIONS:
         print(
             f"     Hinweis: Der Adapter wurde gegen {capabilities.VERIFIED_CLI_VERSION} "
             "geprueft. Bei Syntaxfehlern bitte "
@@ -579,6 +579,49 @@ def cmd_update(args: argparse.Namespace) -> int:
         print(str(error), file=sys.stderr)
         return EXIT_ERROR
     print("Bitte ProtonSyncUI neu starten, damit die neue Version aktiv wird.")
+    return EXIT_OK
+
+
+def cmd_cli_update(args: argparse.Namespace) -> int:
+    """Installiert oder aktualisiert die offizielle Proton-Drive-CLI."""
+    adapter = ProtonDriveAdapter()
+    try:
+        current_binary: str | None = adapter.resolve_binary()
+    except capabilities.ProtonCliNotFoundError:
+        current_binary = None
+    current_version = cli_update.installed_version(current_binary) if current_binary else ""
+
+    try:
+        release = cli_update.fetch_release()
+    except cli_update.CliUpdateError as error:
+        print(str(error), file=sys.stderr)
+        return EXIT_ERROR
+
+    print(f"Installiert: {current_version or '--'}")
+    print(f"Verfuegbar:  {release.version} ({release.platform})")
+    if not cli_update.is_update_available(release, current_version) and not args.force:
+        print("Die Proton-Drive-CLI ist aktuell.")
+        return EXIT_OK
+    if args.check:
+        print("Aktualisieren mit: proton-sync-ui cli-update")
+        return EXIT_WARNING
+
+    repository = _open_repository()
+    try:
+        if any(is_locked(repository.connection, pair.uid) for pair in repository.list_pairs()):
+            print(
+                "Es laeuft gerade ein Sync-Lauf. Bitte nach dessen Ende erneut versuchen.",
+                file=sys.stderr,
+            )
+            return EXIT_LOCKED
+    finally:
+        repository.close()
+
+    try:
+        cli_update.install_release(release, cli_update.target_path(current_binary), progress=print)
+    except cli_update.CliUpdateError as error:
+        print(str(error), file=sys.stderr)
+        return EXIT_ERROR
     return EXIT_OK
 
 
@@ -726,6 +769,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--force", action="store_true", help="auch ohne neuere Version neu installieren"
     )
 
+    cli_parser = sub.add_parser(
+        "cli-update", help="Proton-Drive-CLI installieren oder aktualisieren"
+    )
+    cli_parser.add_argument("--check", action="store_true", help="nur pruefen")
+    cli_parser.add_argument("--force", action="store_true", help="auch ohne neuere Version")
+
     autostart_parser = sub.add_parser("autostart", help="Start bei der Anmeldung schalten")
     autostart_parser.add_argument(
         "autostart_action",
@@ -746,6 +795,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: Sequence[str] | None = None) -> int:
     """Einstiegspunkt der Kommandozeile."""
+    i18n.init()
     parser = build_parser()
     args = parser.parse_args(argv)
 
@@ -779,6 +829,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                 return cmd_doctor(args)
             case "update":
                 return cmd_update(args)
+            case "cli-update":
+                return cmd_cli_update(args)
             case "autostart":
                 return cmd_autostart(args)
             case "gui":

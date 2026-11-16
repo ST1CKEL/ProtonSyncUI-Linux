@@ -17,6 +17,7 @@ from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 from typing import Final
 
+from ..i18n import tr
 from ..logging_setup import get_logger
 from ..models.plan import PlanAction
 from ..models.sync_pair import name_is_supported
@@ -107,8 +108,10 @@ def scan_directory(
                     relative_path=relative,
                     action=PlanAction.SKIP_UNSUPPORTED_NAME,
                     reason=(
-                        "Der Name enthaelt Zeichen, die die Proton-Drive-CLI nicht "
-                        "eindeutig verarbeiten kann (z. B. Backslash)."
+                        tr(
+                            "Der Name enthaelt Zeichen, die die Proton-Drive-CLI nicht "
+                            "eindeutig verarbeiten kann (z. B. Backslash)."
+                        )
                     ),
                 )
             )
@@ -122,7 +125,9 @@ def scan_directory(
                 ScanSkip(
                     relative_path=relative,
                     action=PlanAction.SKIP_UNREADABLE,
-                    reason=f"Dateiinformationen nicht lesbar: {error.strerror or error}",
+                    reason=tr("Dateiinformationen nicht lesbar: {0}").format(
+                        error.strerror or error
+                    ),
                 )
             )
             continue
@@ -135,8 +140,9 @@ def scan_directory(
                     relative_path=relative,
                     action=PlanAction.SKIP_TOO_LARGE,
                     reason=(
-                        f"{_format_size(size)} ueberschreitet das Limit von "
-                        f"{_format_size(max_file_size_bytes)}."
+                        tr("{0} ueberschreitet das Limit von {1}.").format(
+                            _format_size(size), _format_size(max_file_size_bytes)
+                        )
                     ),
                     size_bytes=size,
                 )
@@ -148,7 +154,7 @@ def scan_directory(
                 ScanSkip(
                     relative_path=relative,
                     action=PlanAction.SKIP_UNREADABLE,
-                    reason="Keine Leseberechtigung.",
+                    reason=tr("Keine Leseberechtigung."),
                     size_bytes=size,
                 )
             )
@@ -206,7 +212,7 @@ def _walk(
                     ScanSkip(
                         relative_path=relative,
                         action=PlanAction.SKIP_SYMLINK,
-                        reason="Symbolische Links werden nicht synchronisiert.",
+                        reason=tr("Symbolische Links werden nicht synchronisiert."),
                     )
                 )
                 continue
@@ -226,7 +232,7 @@ def _walk(
                         ScanSkip(
                             relative_path=relative,
                             action=PlanAction.SKIP_EXCLUDED,
-                            reason="Verzeichnis durch Ausschlussregel ausgenommen.",
+                            reason=tr("Verzeichnis durch Ausschlussregel ausgenommen."),
                         )
                     )
                     continue
@@ -239,7 +245,7 @@ def _walk(
                     ScanSkip(
                         relative_path=relative,
                         action=PlanAction.SKIP_UNSUPPORTED_NAME,
-                        reason="Keine regulaere Datei.",
+                        reason=tr("Keine regulaere Datei."),
                     )
                 )
                 continue
@@ -249,7 +255,7 @@ def _walk(
                     ScanSkip(
                         relative_path=relative,
                         action=PlanAction.SKIP_EXCLUDED,
-                        reason="Durch Ausschlussregel ausgenommen.",
+                        reason=tr("Durch Ausschlussregel ausgenommen."),
                     )
                 )
                 continue

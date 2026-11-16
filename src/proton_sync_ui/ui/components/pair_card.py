@@ -6,6 +6,8 @@ from collections.abc import Callable
 
 import gi
 
+from ...i18n import tr
+
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 from gi.repository import Adw, Gio, GLib, Gtk  # noqa: E402
@@ -66,7 +68,7 @@ class PairCardRow(Adw.ExpanderRow):
         # Sync Button
         self._sync_btn = Gtk.Button(
             icon_name="emblem-synchronizing-symbolic",
-            tooltip_text="Jetzt synchronisieren",
+            tooltip_text=tr("Jetzt synchronisieren"),
             valign=Gtk.Align.CENTER,
             css_classes=["flat"],
         )
@@ -76,7 +78,7 @@ class PairCardRow(Adw.ExpanderRow):
         # Menue-Button
         self._menu_btn = Gtk.MenuButton(
             icon_name="view-more-symbolic",
-            tooltip_text="Weitere Aktionen",
+            tooltip_text=tr("Weitere Aktionen"),
             valign=Gtk.Align.CENTER,
             css_classes=["flat"],
         )
@@ -96,16 +98,16 @@ class PairCardRow(Adw.ExpanderRow):
         self.add_row(self._progress_row)
 
         # Modus
-        self._mode_row = Adw.ActionRow(title="Modus")
+        self._mode_row = Adw.ActionRow(title=tr("Modus"))
         self._mode_row.add_css_class("property")
         self.add_row(self._mode_row)
 
         # Lokaler Ordner
-        self._local_row = Adw.ActionRow(title="Lokaler Ordner")
+        self._local_row = Adw.ActionRow(title=tr("Lokaler Ordner"))
         self._local_row.add_css_class("property")
         open_folder_btn = Gtk.Button(
             icon_name="folder-open-symbolic",
-            tooltip_text="Im Dateimanager oeffnen",
+            tooltip_text=tr("Im Dateimanager oeffnen"),
             valign=Gtk.Align.CENTER,
             css_classes=["flat"],
         )
@@ -114,17 +116,17 @@ class PairCardRow(Adw.ExpanderRow):
         self.add_row(self._local_row)
 
         # Proton Drive Pfad
-        self._remote_row = Adw.ActionRow(title="Proton-Drive-Ordner")
+        self._remote_row = Adw.ActionRow(title=tr("Proton-Drive-Ordner"))
         self._remote_row.add_css_class("property")
         self.add_row(self._remote_row)
 
         # Zeitplan
-        self._schedule_row = Adw.ActionRow(title="Zeitplan")
+        self._schedule_row = Adw.ActionRow(title=tr("Zeitplan"))
         self._schedule_row.add_css_class("property")
         self.add_row(self._schedule_row)
 
         # Letzter Lauf
-        self._last_run_row = Adw.ActionRow(title="Letzter Lauf")
+        self._last_run_row = Adw.ActionRow(title=tr("Letzter Lauf"))
         self._last_run_row.add_css_class("property")
         self.add_row(self._last_run_row)
 
@@ -135,15 +137,15 @@ class PairCardRow(Adw.ExpanderRow):
         btn_box.set_margin_start(16)
         btn_box.set_margin_end(16)
 
-        dry_run_btn = Gtk.Button(label="Dry-Run (Vorschau)")
+        dry_run_btn = Gtk.Button(label=tr("Dry-Run (Vorschau)"))
         dry_run_btn.connect("clicked", lambda _: self._on_dry_run(self.pair))
         btn_box.append(dry_run_btn)
 
-        edit_btn = Gtk.Button(label="Bearbeiten")
+        edit_btn = Gtk.Button(label=tr("Bearbeiten"))
         edit_btn.connect("clicked", lambda _: self._on_edit(self.pair))
         btn_box.append(edit_btn)
 
-        delete_btn = Gtk.Button(label="Entfernen", css_classes=["destructive-action"])
+        delete_btn = Gtk.Button(label=tr("Entfernen"), css_classes=["destructive-action"])
         delete_btn.connect("clicked", lambda _: self._on_delete(self.pair))
         btn_box.append(delete_btn)
 
@@ -155,16 +157,16 @@ class PairCardRow(Adw.ExpanderRow):
 
     def _build_menu(self) -> Gio.Menu:
         menu = Gio.Menu()
-        menu.append("Dry-Run (Vorschau)", f"pair.dry-run::{self.pair.uid}")
-        menu.append("Im Dateimanager oeffnen", f"pair.open-folder::{self.pair.uid}")
-        menu.append("Bearbeiten", f"pair.edit::{self.pair.uid}")
-        menu.append("Entfernen", f"pair.delete::{self.pair.uid}")
+        menu.append(tr("Dry-Run (Vorschau)"), f"pair.dry-run::{self.pair.uid}")
+        menu.append(tr("Im Dateimanager oeffnen"), f"pair.open-folder::{self.pair.uid}")
+        menu.append(tr("Bearbeiten"), f"pair.edit::{self.pair.uid}")
+        menu.append(tr("Entfernen"), f"pair.delete::{self.pair.uid}")
         return menu
 
     def _on_switch_toggled(self, _switch: Gtk.Switch, state: bool) -> bool:
         self._on_toggle(self.pair, state)
         self._badge.set_state(
-            "Aktuell" if state else "Deaktiviert",
+            tr("Aktuell") if state else tr("Deaktiviert"),
             BadgeState.SUCCESS if state else BadgeState.PAUSED,
         )
         return False
@@ -186,11 +188,11 @@ class PairCardRow(Adw.ExpanderRow):
         self._remote_row.set_subtitle(pair.remote_path)
 
         if pair.schedule_kind is ScheduleKind.INTERVAL and pair.interval_minutes:
-            schedule = f"alle {pair.interval_minutes} Minuten (systemd-Timer)"
+            schedule = tr("alle {0} Minuten (systemd-Timer)").format(pair.interval_minutes)
         else:
-            schedule = "manuell"
+            schedule = tr("manuell")
         if not pair.enabled:
-            schedule += " -- deaktiviert"
+            schedule += tr(" -- deaktiviert")
         self._schedule_row.set_subtitle(schedule)
 
     def update_status(self, last_run: RunRecord | None, *, is_running: bool = False) -> None:
@@ -199,17 +201,17 @@ class PairCardRow(Adw.ExpanderRow):
         self._progress_row.set_visible(is_running)
 
         if is_running:
-            self._badge.set_state("Synchronisiert…", BadgeState.RUNNING)
+            self._badge.set_state(tr("Synchronisiert…"), BadgeState.RUNNING)
             self.set_expanded(True)
             return
 
         if not self.pair.enabled:
-            self._badge.set_state("Deaktiviert", BadgeState.PAUSED)
+            self._badge.set_state(tr("Deaktiviert"), BadgeState.PAUSED)
             return
 
         if last_run is None:
-            self._badge.set_state("Bereit", BadgeState.NEUTRAL)
-            self._last_run_row.set_subtitle("Noch kein Durchgang erfolgt")
+            self._badge.set_state(tr("Bereit"), BadgeState.NEUTRAL)
+            self._last_run_row.set_subtitle(tr("Noch kein Durchgang erfolgt"))
             return
 
         self._badge = StatusBadge.from_run_status(
@@ -218,7 +220,7 @@ class PairCardRow(Adw.ExpanderRow):
         ts = (
             last_run.finished_at.strftime("%d.%m.%Y %H:%M") if last_run.finished_at else "unbekannt"
         )
-        kind = " (Dry-Run)" if last_run.dry_run else ""
+        kind = tr(" (Dry-Run)") if last_run.dry_run else ""
         self._last_run_row.set_subtitle(
             f"{ts}{kind} -- {last_run.message or last_run.status.value}"
         )

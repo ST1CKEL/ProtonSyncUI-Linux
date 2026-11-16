@@ -28,6 +28,8 @@ class Settings:
     auto_update_check: bool = True
     #: Zeitpunkt der letzten automatischen Update-Suche (ISO 8601, UTC).
     last_update_check: str = ""
+    #: Sprache der Oberflaeche: ``de``, ``en`` oder leer (= Sprache der Sitzung).
+    language: str = ""
 
 
 def settings_path() -> Path:

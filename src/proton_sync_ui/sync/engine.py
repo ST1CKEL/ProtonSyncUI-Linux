@@ -32,6 +32,7 @@ from ..cli_adapter.errors import (
     ProtonCliError,
     ProtonCliNotFoundError,
 )
+from ..i18n import tr
 from ..logging_setup import get_logger
 from ..models.plan import PlanAction, PlanItem, UploadPlan
 from ..models.run import FileError, RunRecord, RunStatus
@@ -94,7 +95,7 @@ _PHASE_LABELS: dict[SyncPhase, str] = {
 
 def phase_label(phase: SyncPhase) -> str:
     """Deutsche Bezeichnung einer Phase."""
-    return _PHASE_LABELS.get(phase, phase.value)
+    return tr(_PHASE_LABELS.get(phase, phase.value))
 
 
 @dataclass(frozen=True, slots=True)
@@ -180,7 +181,7 @@ class SyncEngine:
             record = RunRecord(pair_uid=pair.uid, run_id=run_id, dry_run=dry_run)
             record.status = RunStatus.RUNNING
 
-            self._emit(SyncProgress(pair.uid, SyncPhase.PREPARING, message="CLI wird geprueft"))
+            self._emit(SyncProgress(pair.uid, SyncPhase.PREPARING, message=tr("CLI wird geprueft")))
 
             problem = await self._preflight()
             if problem:
@@ -194,7 +195,9 @@ class SyncEngine:
                 return record, empty_plan
 
             if not pair.local_path.is_dir():
-                message = f"Der Quellordner '{pair.local_path}' existiert nicht (mehr)."
+                message = tr("Der Quellordner '{0}' existiert nicht (mehr).").format(
+                    pair.local_path
+                )
                 record.fail(message)
                 self._repository.finish_run(record)
                 log.error(message, extra={"pair_uid": pair.uid, "run_id": run_id})
@@ -215,7 +218,7 @@ class SyncEngine:
                 )
                 return record, empty_plan
             except Exception as error:
-                message = f"Fehler bei der Planerstellung: {error}"
+                message = tr("Fehler bei der Planerstellung: {0}").format(error)
                 record.fail(message)
                 self._repository.finish_run(record)
                 log.exception(message, extra={"pair_uid": pair.uid, "run_id": run_id})
@@ -236,7 +239,7 @@ class SyncEngine:
                 )
 
             if dry_run:
-                record.message = f"Dry-Run: {plan.describe()}"
+                record.message = tr("Dry-Run: {0}").format(plan.describe())
                 record.finish()
                 self._repository.finish_run(record)
                 self._emit(
@@ -266,8 +269,9 @@ class SyncEngine:
                 # Bereits uebertragene Dateien sind verbucht und bleiben es;
                 # der naechste Lauf setzt dort fort.
                 message = (
-                    f"{error} -- {record.transferred_files} von {record.planned_files} "
-                    "Datei(en) wurden zuvor uebertragen."
+                    tr("{0} -- {1} von {2} Datei(en) wurden zuvor uebertragen.").format(
+                        error, record.transferred_files, record.planned_files
+                    )
                     if record.transferred_files
                     else str(error)
                 )
@@ -281,7 +285,7 @@ class SyncEngine:
             except Exception as error:
                 # Unerwartet (z. B. Datenbankfehler): den Lauf nicht als
                 # "laeuft" haengen lassen.
-                message = f"Unerwarteter Fehler waehrend der Uebertragung: {error}"
+                message = tr("Unerwarteter Fehler waehrend der Uebertragung: {0}").format(error)
                 record.fail(message)
                 with contextlib.suppress(Exception):
                     self._repository.finish_run(record)
@@ -295,10 +299,10 @@ class SyncEngine:
                 # synchron" melden.
                 if record.status is RunStatus.SUCCESS:
                     record.status = RunStatus.WARNING
-                record.message = (
-                    f"{record.message} -- {deferred} Datei(en) zurueckgestellt, weil "
-                    "Cloud-Ordner nicht gelesen werden konnten"
-                )
+                record.message = tr(
+                    "{0} -- {1} Datei(en) zurueckgestellt, weil Cloud-Ordner nicht gelesen "
+                    "werden konnten"
+                ).format(record.message, deferred)
             self._repository.finish_run(record)
             self._repository.prune_runs(pair.uid, keep=RUN_HISTORY_LIMIT)
 
@@ -324,7 +328,7 @@ class SyncEngine:
     def _finish_cancelled(self, pair: SyncPair, record: RunRecord) -> None:
         """Schliesst einen abgebrochenen Lauf in der Historie ab."""
         record.status = RunStatus.CANCELLED
-        record.message = "Der Lauf wurde abgebrochen."
+        record.message = tr("Der Lauf wurde abgebrochen.")
         record.finish()
         try:
             self._repository.finish_run(record)
@@ -338,7 +342,7 @@ class SyncEngine:
         if not caps.available:
             return caps.problem
         if not caps.authenticated:
-            return caps.problem or "Die Proton-Drive-CLI ist nicht angemeldet."
+            return caps.problem or tr("Die Proton-Drive-CLI ist nicht angemeldet.")
         return ""
 
     async def _build_plan(self, pair: SyncPair) -> UploadPlan:
@@ -353,7 +357,7 @@ class SyncEngine:
 
         self._emit(
             SyncProgress(
-                pair.uid, SyncPhase.SCANNING_LOCAL, message="Lokale Dateien werden gesucht"
+                pair.uid, SyncPhase.SCANNING_LOCAL, message=tr("Lokale Dateien werden gesucht")
             )
         )
         local_scan = await asyncio.to_thread(
@@ -369,7 +373,7 @@ class SyncEngine:
                 SyncProgress(
                     pair.uid,
                     SyncPhase.SCANNING_REMOTE,
-                    message="Proton-Drive-Dateien werden gesucht",
+                    message=tr("Proton-Drive-Dateien werden gesucht"),
                 )
             )
 
@@ -378,7 +382,9 @@ class SyncEngine:
                     SyncProgress(
                         pair.uid,
                         SyncPhase.SCANNING_REMOTE,
-                        message=f"Cloud-Dateien werden gesucht ({folders} Ordner, {count} Dateien)",
+                        message=tr("Cloud-Dateien werden gesucht ({0} Ordner, {1} Dateien)").format(
+                            folders, count
+                        ),
                     )
                 )
 
@@ -393,7 +399,9 @@ class SyncEngine:
             )
             if remote_scan.root_failed:
                 detail = remote_scan.errors[0] if remote_scan.errors else pair.remote_path
-                raise RunAbortedError(f"Proton Drive konnte nicht gelesen werden: {detail}")
+                raise RunAbortedError(
+                    tr("Proton Drive konnte nicht gelesen werden: {0}").format(detail)
+                )
             # Was der Scan gesehen hat, muss spaeter nicht erneut angelegt werden.
             self._known_folders.update(remote_scan.folders)
 
@@ -402,7 +410,7 @@ class SyncEngine:
                 pair.uid,
                 SyncPhase.PLANNING,
                 total=len(local_scan.files) + (len(remote_scan.files) if remote_scan else 0),
-                message="Plan wird berechnet",
+                message=tr("Plan wird berechnet"),
             )
         )
 
@@ -445,7 +453,7 @@ class SyncEngine:
                         uploaded_bytes=record.uploaded_bytes,
                         downloaded_bytes=record.downloaded_bytes,
                         total_bytes=total_bytes,
-                        message=f"Download: {relative.as_posix()}",
+                        message=tr("Download: {0}").format(relative.as_posix()),
                     )
                 )
 
@@ -506,7 +514,7 @@ class SyncEngine:
                     pair.uid,
                     SyncPhase.FOLDERS,
                     total=total_items,
-                    message="Zielordner werden geprueft",
+                    message=tr("Zielordner werden geprueft"),
                 )
             )
 
@@ -525,7 +533,7 @@ class SyncEngine:
                         uploaded_bytes=record.uploaded_bytes,
                         downloaded_bytes=record.downloaded_bytes,
                         total_bytes=total_bytes,
-                        message=f"Upload: {relative.as_posix()}",
+                        message=tr("Upload: {0}").format(relative.as_posix()),
                     )
                 )
 
@@ -631,7 +639,7 @@ class SyncEngine:
             local_file.parent.mkdir(parents=True, exist_ok=True)
             staging = Path(tempfile.mkdtemp(prefix=DOWNLOAD_STAGING_PREFIX, dir=local_file.parent))
         except OSError as error:
-            return local_error(error, "Lokaler Schreibfehler")
+            return local_error(error, tr("Lokaler Schreibfehler"))
 
         async def attempt_download() -> None:
             # Reste eines fehlgeschlagenen Versuchs entfernen, sonst wuerde die
@@ -650,7 +658,7 @@ class SyncEngine:
             if not downloaded.is_file():
                 return FileError(
                     relative_path=item.posix_path,
-                    message="Die CLI hat den Download gemeldet, aber keine Datei geliefert.",
+                    message=tr("Die CLI hat den Download gemeldet, aber keine Datei geliefert."),
                     attempts=attempts,
                     permanent=False,
                 )
@@ -668,7 +676,7 @@ class SyncEngine:
                     local_file.rename(conflict_file)
                 except OSError as error:
                     # Ohne Sicherung wird nichts ueberschrieben.
-                    return local_error(error, "Lokale Fassung konnte nicht gesichert werden")
+                    return local_error(error, tr("Lokale Fassung konnte nicht gesichert werden"))
                 log.warning(
                     "Konflikt: Lokale Fassung gesichert als %s",
                     conflict_file.name,
@@ -678,7 +686,7 @@ class SyncEngine:
             try:
                 downloaded.replace(local_file)
             except OSError as error:
-                return local_error(error, "Lokaler Schreibfehler")
+                return local_error(error, tr("Lokaler Schreibfehler"))
         except asyncio.CancelledError:
             raise
         except FATAL_ERRORS:
@@ -691,7 +699,7 @@ class SyncEngine:
                 permanent=not error.transient,
             )
         except OSError as error:
-            return local_error(error, "Lokaler Schreibfehler")
+            return local_error(error, tr("Lokaler Schreibfehler"))
         finally:
             shutil.rmtree(staging, ignore_errors=True)
         return None
@@ -728,7 +736,7 @@ class SyncEngine:
             if not local_file.is_file():
                 return FileError(
                     relative_path=item.posix_path,
-                    message="Die Datei ist seit dem Scan verschwunden.",
+                    message=tr("Die Datei ist seit dem Scan verschwunden."),
                     attempts=1,
                     permanent=True,
                 )
@@ -757,7 +765,7 @@ class SyncEngine:
         except OSError as error:
             return FileError(
                 relative_path=item.posix_path,
-                message=f"Lokaler Dateifehler: {error.strerror or error}",
+                message=tr("Lokaler Dateifehler: {0}").format(error.strerror or error),
                 attempts=attempts,
                 permanent=True,
             )
@@ -771,8 +779,10 @@ class SyncEngine:
         self._consecutive_failures += 1
         if self._consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
             raise RunAbortedError(
-                f"{self._consecutive_failures} Dateien in Folge sind fehlgeschlagen; der Lauf "
-                f"wurde beendet. Letzter Fehler: {error.message}"
+                tr(
+                    "{0} Dateien in Folge sind fehlgeschlagen; der Lauf wurde beendet. "
+                    "Letzter Fehler: {1}"
+                ).format(self._consecutive_failures, error.message)
             )
 
     async def _ensure_remote_folder(self, remote_path: str) -> None:

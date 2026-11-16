@@ -6,6 +6,8 @@ from typing import TYPE_CHECKING
 
 import gi
 
+from ...i18n import tr
+
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 from gi.repository import Adw, Gdk, GLib, Gtk  # noqa: E402
@@ -32,7 +34,7 @@ class ActivityView(Gtk.Box):
         header = Adw.HeaderBar()
         refresh_btn = Gtk.Button(
             icon_name="view-refresh-symbolic",
-            tooltip_text="Aktivitaeten aktualisieren",
+            tooltip_text=tr("Aktivitaeten aktualisieren"),
             css_classes=["flat"],
         )
         refresh_btn.connect("clicked", lambda _: self.refresh())
@@ -46,11 +48,11 @@ class ActivityView(Gtk.Box):
         filter_bar.set_margin_start(16)
         filter_bar.set_margin_end(16)
 
-        filter_label = Gtk.Label(label="Filter:", css_classes=["dim-label"])
+        filter_label = Gtk.Label(label=tr("Filter:"), css_classes=["dim-label"])
         filter_bar.append(filter_label)
 
         self._filter_combo = Gtk.DropDown.new_from_strings(
-            ["Alle", "Erfolgreich", "Fehler", "Dry-Run"]
+            [tr("Alle"), tr("Erfolgreich"), tr("Fehler"), "Dry-Run"]
         )
         self._filter_combo.connect("notify::selected", self._on_filter_changed)
         filter_bar.append(self._filter_combo)
@@ -61,14 +63,16 @@ class ActivityView(Gtk.Box):
 
         empty_page = Adw.StatusPage(
             icon_name="document-open-recent-symbolic",
-            title="Keine Aktivitaeten vorhanden",
-            description="Sobald Synchronisationslaeufe stattfinden, werden sie hier aufgefuehrt.",
+            title=tr("Keine Aktivitaeten vorhanden"),
+            description=tr(
+                "Sobald Synchronisationslaeufe stattfinden, werden sie hier aufgefuehrt."
+            ),
         )
         self._stack.add_named(empty_page, "empty")
 
         scroll = Gtk.ScrolledWindow(hscrollbar_policy=Gtk.PolicyType.NEVER)
         clamp = Adw.Clamp(maximum_size=860, tightening_threshold=600)
-        self._group = Adw.PreferencesGroup(title="Chronologischer Verlauf")
+        self._group = Adw.PreferencesGroup(title=tr("Chronologischer Verlauf"))
         clamp.set_child(self._group)
         scroll.set_child(clamp)
         self._stack.add_named(scroll, "list")
@@ -106,11 +110,11 @@ class ActivityView(Gtk.Box):
         ts = (
             run.finished_at.astimezone().strftime("%d.%m.%Y %H:%M:%S")
             if run.finished_at
-            else "Laeuft"
+            else tr("Laeuft")
         )
-        title = f"Lauf vom {ts}"
+        title = tr("Lauf vom {0}").format(ts)
         if run.dry_run:
-            title += " (Dry-Run Vorschau)"
+            title += tr(" (Dry-Run Vorschau)")
 
         row = Adw.ExpanderRow(
             title=GLib.markup_escape_text(title),
@@ -130,22 +134,27 @@ class ActivityView(Gtk.Box):
 
         # Details
         stat_row = Adw.ActionRow(
-            title="Uebertragene Daten",
+            title=tr("Uebertragene Daten"),
             subtitle=(
-                f"Dateien: {run.transferred_files} uebertragen / {run.planned_files} geplant · "
-                f"Upload: {format_size(run.uploaded_bytes)} · "
-                f"Download: {format_size(run.downloaded_bytes)}"
+                tr("Dateien: {0} uebertragen / {1} geplant · Upload: {2} · Download: {3}").format(
+                    run.transferred_files,
+                    run.planned_files,
+                    format_size(run.uploaded_bytes),
+                    format_size(run.downloaded_bytes),
+                )
             ),
         )
         stat_row.add_css_class("property")
         row.add_row(stat_row)
 
         if run.duration_seconds is not None:
-            dur_row = Adw.ActionRow(title="Dauer", subtitle=f"{run.duration_seconds:.1f} Sekunden")
+            dur_row = Adw.ActionRow(
+                title=tr("Dauer"), subtitle=tr("{0:.1f} Sekunden").format(run.duration_seconds)
+            )
             dur_row.add_css_class("property")
             row.add_row(dur_row)
 
-        copy_btn = Gtk.Button(label="Zusammenfassung kopieren", css_classes=["flat"])
+        copy_btn = Gtk.Button(label=tr("Zusammenfassung kopieren"), css_classes=["flat"])
         copy_btn.connect("clicked", lambda _: self._copy_run_details(run))
 
         btn_row = Adw.ActionRow()
@@ -155,20 +164,24 @@ class ActivityView(Gtk.Box):
         return row
 
     def _copy_run_details(self, run: RunRecord) -> None:
-        text = (
-            f"ProtonSyncUI Lauf:\n"
-            f"Status: {run.status.value}\n"
-            f"Zeit: {run.finished_at.astimezone() if run.finished_at else 'laeuft'}\n"
-            f"Meldung: {run.message}\n"
-            f"Dateien geplant: {run.planned_files}, uebertragen: {run.transferred_files}\n"
-            f"Upload: {run.uploaded_bytes} B, Download: {run.downloaded_bytes} B"
+        text = tr(
+            "ProtonSyncUI Lauf:\nStatus: {0}\nZeit: {1}\nMeldung: {2}\nDateien "
+            "geplant: {3}, uebertragen: {4}\nUpload: {5} B, Download: {6} B"
+        ).format(
+            run.status.value,
+            run.finished_at.astimezone() if run.finished_at else "laeuft",
+            run.message,
+            run.planned_files,
+            run.transferred_files,
+            run.uploaded_bytes,
+            run.downloaded_bytes,
         )
         display = Gdk.Display.get_default()
         if display is not None:
             clipboard = display.get_clipboard()
             if clipboard:
                 clipboard.set(text)
-                self._window.toast("Lauf-Informationen kopiert.")
+                self._window.toast(tr("Lauf-Informationen kopiert."))
 
     def _on_filter_changed(self, combo: Gtk.DropDown, _param: object) -> None:
         idx = combo.get_selected()

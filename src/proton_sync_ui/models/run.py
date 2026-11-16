@@ -6,6 +6,8 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import StrEnum
 
+from ..i18n import tr
+
 
 class RunStatus(StrEnum):
     """Ergebnis eines Laufs."""
@@ -52,12 +54,12 @@ _RUN_STATUS_LABELS: dict[RunStatus, str] = {
 
 def pair_status_label(status: PairStatus) -> str:
     """Deutsche Bezeichnung eines Paar-Status."""
-    return _STATUS_LABELS.get(status, status.value)
+    return tr(_STATUS_LABELS.get(status, status.value))
 
 
 def run_status_label(status: RunStatus) -> str:
     """Deutsche Bezeichnung eines Lauf-Status."""
-    return _RUN_STATUS_LABELS.get(status, status.value)
+    return tr(_RUN_STATUS_LABELS.get(status, status.value))
 
 
 def pair_status_from_run(status: RunStatus | None, *, enabled: bool) -> PairStatus:
@@ -166,30 +168,31 @@ class RunRecord:
 
     def summary_line(self) -> str:
         """Einzeilige Zusammenfassung fuer Kommandozeile und Oberflaeche."""
-        kind = "Dry-Run" if self.dry_run else "Lauf"
+        kind = "Dry-Run" if self.dry_run else tr("Lauf")
         parts = [
             f"{kind} {run_status_label(self.status)}",
-            f"geplant: {self.planned_files}",
+            tr("geplant: {0}").format(self.planned_files),
         ]
         if self.downloaded_files > 0 and self.uploaded_files > 0:
             parts.append(
-                f"uebertragen: {self.transferred_files} "
-                f"({self.downloaded_files} empfangen, {self.uploaded_files} gesendet)"
+                tr("uebertragen: {0} ({1} empfangen, {2} gesendet)").format(
+                    self.transferred_files, self.downloaded_files, self.uploaded_files
+                )
             )
         elif self.downloaded_files > 0:
-            parts.append(f"uebertragen: {self.downloaded_files} heruntergeladen")
+            parts.append(tr("uebertragen: {0} heruntergeladen").format(self.downloaded_files))
         else:
-            parts.append(f"uebertragen: {self.uploaded_files}")
+            parts.append(tr("uebertragen: {0}").format(self.uploaded_files))
 
         parts.extend(
             [
-                f"fehlgeschlagen: {self.failed_files}",
-                f"uebersprungen: {self.skipped_files}",
+                tr("fehlgeschlagen: {0}").format(self.failed_files),
+                tr("uebersprungen: {0}").format(self.skipped_files),
             ]
         )
         duration = self.duration_seconds
         if duration is not None:
-            parts.append(f"Dauer: {duration:.1f}s")
+            parts.append(tr("Dauer: {0:.1f}s").format(duration))
         return " | ".join(parts)
 
 

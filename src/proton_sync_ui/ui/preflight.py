@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import gi
 
+from ..i18n import tr
+
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 
@@ -43,11 +45,11 @@ def _copy_to_clipboard(text: str) -> None:
 def show_cli_missing_dialog(parent: Gtk.Widget, message: str = "") -> Adw.AlertDialog:
     """Meldet, dass ``proton-drive`` nicht gefunden wurde."""
     dialog = Adw.AlertDialog(
-        heading="Proton-Drive-CLI nicht gefunden",
-        body=message or _INSTALL_HINT,
+        heading=tr("Proton-Drive-CLI nicht gefunden"),
+        body=message or tr(_INSTALL_HINT),
     )
-    dialog.add_response("close", "Verstanden")
-    dialog.add_response("copy", "Befehl kopieren")
+    dialog.add_response("close", tr("Verstanden"))
+    dialog.add_response("copy", tr("Befehl kopieren"))
     dialog.set_default_response("close")
     dialog.set_close_response("close")
     dialog.connect("response", _on_copy_response)
@@ -58,11 +60,11 @@ def show_cli_missing_dialog(parent: Gtk.Widget, message: str = "") -> Adw.AlertD
 def show_not_authenticated_dialog(parent: Gtk.Widget, message: str = "") -> Adw.AlertDialog:
     """Meldet, dass die CLI nicht angemeldet ist."""
     dialog = Adw.AlertDialog(
-        heading="Proton-Drive-CLI nicht angemeldet",
-        body=message or _AUTH_HINT,
+        heading=tr("Proton-Drive-CLI nicht angemeldet"),
+        body=message or tr(_AUTH_HINT),
     )
-    dialog.add_response("close", "Verstanden")
-    dialog.add_response("copy", "Befehl kopieren")
+    dialog.add_response("close", tr("Verstanden"))
+    dialog.add_response("copy", tr("Befehl kopieren"))
     dialog.set_default_response("copy")
     dialog.set_close_response("close")
     dialog.connect("response", _on_copy_response)
@@ -83,8 +85,8 @@ def show_capability_problem(parent: Gtk.Widget, caps: Capabilities) -> Adw.Alert
     if not caps.authenticated:
         return show_not_authenticated_dialog(parent, caps.problem)
     if caps.problem:
-        dialog = Adw.AlertDialog(heading="Hinweis zur Proton-Drive-CLI", body=caps.problem)
-        dialog.add_response("close", "Verstanden")
+        dialog = Adw.AlertDialog(heading=tr("Hinweis zur Proton-Drive-CLI"), body=caps.problem)
+        dialog.add_response("close", tr("Verstanden"))
         dialog.set_default_response("close")
         dialog.set_close_response("close")
         dialog.present(parent)
@@ -95,7 +97,7 @@ def show_capability_problem(parent: Gtk.Widget, caps: Capabilities) -> Adw.Alert
 def show_error_dialog(parent: Gtk.Widget, heading: str, body: str) -> Adw.AlertDialog:
     """Allgemeiner Fehlerdialog."""
     dialog = Adw.AlertDialog(heading=heading, body=body)
-    dialog.add_response("close", "Schliessen")
+    dialog.add_response("close", tr("Schliessen"))
     dialog.set_default_response("close")
     dialog.set_close_response("close")
     dialog.present(parent)

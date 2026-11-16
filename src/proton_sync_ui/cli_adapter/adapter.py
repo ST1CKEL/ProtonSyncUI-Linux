@@ -23,6 +23,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Final
 
+from ..i18n import tr
 from ..logging_setup import get_logger, redact
 from . import commands
 from .errors import (
@@ -196,15 +197,17 @@ def classify_error(*, returncode: int, output: str, argv: Sequence[str]) -> Prot
     """
     haystack = output.lower()
     argv_tuple = tuple(argv)
-    message = redact(output.strip()) or f"Die CLI endete mit Code {returncode}."
+    message = redact(output.strip()) or tr("Die CLI endete mit Code {0}.").format(returncode)
 
     def has(markers: tuple[str, ...]) -> bool:
         return any(marker in haystack for marker in markers)
 
     if has(_AUTH_MARKERS):
         return NotAuthenticatedError(
-            "Die Proton-Drive-CLI ist nicht angemeldet. "
-            "Bitte einmalig 'proton-drive auth login' im Terminal ausfuehren.",
+            tr(
+                "Die Proton-Drive-CLI ist nicht angemeldet. "
+                "Bitte einmalig 'proton-drive auth login' im Terminal ausfuehren."
+            ),
             argv=argv_tuple,
             stderr=message,
         )
@@ -260,8 +263,10 @@ class ProtonDriveAdapter:
                 self._resolved_binary = str(path)
                 return self._resolved_binary
             raise ProtonCliNotFoundError(
-                f"Die Proton-Drive-CLI wurde unter '{candidate}' nicht gefunden "
-                "oder ist nicht ausfuehrbar."
+                tr(
+                    "Die Proton-Drive-CLI wurde unter '{0}' nicht gefunden oder ist nicht "
+                    "ausfuehrbar."
+                ).format(candidate)
             )
 
         found = shutil.which(candidate)
@@ -273,11 +278,13 @@ class ProtonDriveAdapter:
                     break
         if found is None:
             raise ProtonCliNotFoundError(
-                "Das Programm 'proton-drive' wurde nicht gefunden.\n\n"
-                "ProtonSyncUI benoetigt die offizielle Proton-Drive-Kommandozeile. "
-                "Bitte installiere sie und stelle sicher, dass sie im PATH liegt "
-                "(haeufig ~/.local/bin). Danach einmalig anmelden mit:\n\n"
-                "    proton-drive auth login"
+                tr(
+                    "Das Programm 'proton-drive' wurde nicht gefunden.\n\n"
+                    "ProtonSyncUI benoetigt die offizielle Proton-Drive-Kommandozeile. "
+                    "Bitte installiere sie und stelle sicher, dass sie im PATH liegt "
+                    "(haeufig ~/.local/bin). Danach einmalig anmelden mit:\n\n"
+                    "    proton-drive auth login"
+                )
             )
         self._resolved_binary = found
         return found
@@ -352,8 +359,10 @@ class ProtonDriveAdapter:
         except TimeoutError:
             await self._terminate(process)
             raise CommandTimeoutError(
-                f"Der CLI-Aufruf hat das Zeitlimit von {limit:.0f} Sekunden ueberschritten "
-                "und wurde beendet.",
+                tr(
+                    "Der CLI-Aufruf hat das Zeitlimit von {0:.0f} Sekunden ueberschritten "
+                    "und wurde beendet."
+                ).format(limit),
                 argv=tuple(argv),
             ) from None
         except asyncio.CancelledError:
