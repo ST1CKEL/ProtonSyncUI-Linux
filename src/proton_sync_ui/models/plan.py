@@ -28,6 +28,7 @@ class PlanAction(StrEnum):
     SKIP_UNSUPPORTED_NAME = "skip_unsupported_name"
     SKIP_UNREADABLE = "skip_unreadable"
     SKIP_DOCS_SHEETS = "skip_docs_sheets"
+    SKIP_REMOTE_UNKNOWN = "skip_remote_unknown"
     LOCAL_DELETED = "local_deleted"
 
 
@@ -54,6 +55,7 @@ SKIP_ACTIONS: frozenset[PlanAction] = frozenset(
         PlanAction.SKIP_UNSUPPORTED_NAME,
         PlanAction.SKIP_UNREADABLE,
         PlanAction.SKIP_DOCS_SHEETS,
+        PlanAction.SKIP_REMOTE_UNKNOWN,
     }
 )
 
@@ -70,6 +72,7 @@ _ACTION_LABELS: dict[PlanAction, str] = {
     PlanAction.SKIP_UNSUPPORTED_NAME: "Name nicht unterstuetzt",
     PlanAction.SKIP_UNREADABLE: "Nicht lesbar",
     PlanAction.SKIP_DOCS_SHEETS: "Proton Doc/Sheet (nicht downloadbar)",
+    PlanAction.SKIP_REMOTE_UNKNOWN: "Cloud-Stand unbekannt",
     PlanAction.LOCAL_DELETED: "Lokal geloescht",
 }
 

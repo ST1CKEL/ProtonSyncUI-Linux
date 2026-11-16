@@ -41,6 +41,17 @@ log = get_logger("cli_adapter.adapter")
 #: Zeitlimit fuer kurze Abfragen (list, info, create-folder).
 DEFAULT_QUERY_TIMEOUT: Final = 120.0
 
+#: Verzeichnisse, in denen die CLI zusaetzlich zum PATH gesucht wird. systemd
+#: und der Sitzungs-Autostart laufen ohne die PATH-Erweiterungen einer
+#: Login-Shell; ``~/.local/bin`` fehlt dort haeufig.
+FALLBACK_BINARY_DIRS: Final[tuple[str, ...]] = (
+    "~/.local/bin",
+    "~/bin",
+    "/usr/local/bin",
+    "/usr/bin",
+    "/opt/proton-drive",
+)
+
 #: Zeitlimit fuer einen Upload. Grosszuegig, weil grosse Dateien ueber
 #: langsame Leitungen lange brauchen duerfen.
 DEFAULT_UPLOAD_TIMEOUT: Final = 3600.0
@@ -56,6 +67,12 @@ _AUTH_MARKERS: Final[tuple[str, ...]] = (
     "session expired",
     "invalid session",
     "401",
+    # Tatsaechliche Meldung der CLI 0.8/0.9 ohne gueltige Sitzung.
+    "need to login",
+    "login first",
+    "log in first",
+    "nicht angemeldet",
+    "bitte anmelden",
 )
 
 _NOT_FOUND_MARKERS: Final[tuple[str, ...]] = (
@@ -64,6 +81,9 @@ _NOT_FOUND_MARKERS: Final[tuple[str, ...]] = (
     "no such file",
     "does not exist",
     "enoent",
+    # Die Proton-API uebersetzt Fehlertexte anhand der Systemsprache.
+    "nicht gefunden",
+    "existiert nicht",
 )
 
 _EXISTS_MARKERS: Final[tuple[str, ...]] = (
@@ -71,6 +91,8 @@ _EXISTS_MARKERS: Final[tuple[str, ...]] = (
     "name is already taken",
     "duplicate",
     "eexist",
+    "existiert bereits",
+    "bereits vorhanden",
 )
 
 _TRANSIENT_MARKERS: Final[tuple[str, ...]] = (
@@ -119,6 +141,11 @@ class CommandResult:
     stdout: str
     stderr: str
     duration_seconds: float
+    #: Unveraenderte Standardausgabe -- ausschliesslich zum maschinellen
+    #: Auswerten (JSON). Niemals loggen oder anzeigen: Die Schwaerzung in
+    #: ``stdout`` ersetzt z. B. lange Hex-Folgen, was Dateinamen wie die
+    #: Pruefsummen-Namen eines npm-Caches unbrauchbar machen wuerde.
+    raw_stdout: str = field(default="", repr=False, compare=False)
 
     @property
     def ok(self) -> bool:
@@ -239,6 +266,12 @@ class ProtonDriveAdapter:
 
         found = shutil.which(candidate)
         if found is None:
+            for directory in FALLBACK_BINARY_DIRS:
+                path = Path(directory).expanduser() / candidate
+                if path.is_file() and os.access(path, os.X_OK):
+                    found = str(path)
+                    break
+        if found is None:
             raise ProtonCliNotFoundError(
                 "Das Programm 'proton-drive' wurde nicht gefunden.\n\n"
                 "ProtonSyncUI benoetigt die offizielle Proton-Drive-Kommandozeile. "
@@ -269,6 +302,14 @@ class ProtonDriveAdapter:
         env.setdefault("NO_COLOR", "1")
         env.setdefault("TERM", "dumb")
         env.setdefault("CI", "1")
+        # Fehlertexte werden anhand ihrer englischen Fassung eingeordnet. Ohne
+        # diese Vorgabe liefert die Proton-API uebersetzte Meldungen ("Datei
+        # oder Ordner mit diesem Namen existiert bereits."), die frueher als
+        # unbekannter Fehler endlos wiederholt wurden.
+        if self._env_override is None:
+            env["LANGUAGE"] = "en"
+            env["LC_MESSAGES"] = "C.UTF-8"
+            env.pop("LC_ALL", None)
         return env
 
     # ------------------------------------------------------------------
@@ -320,10 +361,12 @@ class ProtonDriveAdapter:
             raise
 
         duration = time.monotonic() - started
+        decoded_out = raw_out.decode("utf-8", errors="replace").strip()
         result = CommandResult(
             argv=tuple(argv),
             returncode=process.returncode if process.returncode is not None else -1,
-            stdout=redact(raw_out.decode("utf-8", errors="replace").strip(), max_length=None),
+            stdout=redact(decoded_out, max_length=None),
+            raw_stdout=decoded_out,
             stderr=redact(raw_err.decode("utf-8", errors="replace").strip(), max_length=None),
             duration_seconds=duration,
         )
@@ -392,7 +435,7 @@ class ProtonDriveAdapter:
             raise classify_error(
                 returncode=result.returncode, output=result.combined_output, argv=result.argv
             )
-        return _parse_nodes(result.stdout, remote_parent=remote_path)
+        return _parse_nodes(result.raw_stdout or result.stdout, remote_parent=remote_path)
 
     async def exists(self, remote_path: str) -> bool:
         """Prueft, ob ein entfernter Pfad existiert."""

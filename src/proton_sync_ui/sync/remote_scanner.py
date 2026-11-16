@@ -12,11 +12,16 @@ from dataclasses import dataclass, field
 from pathlib import PurePosixPath
 
 from ..cli_adapter.adapter import ProtonDriveAdapter
-from ..cli_adapter.errors import RemotePathNotFoundError
+from ..cli_adapter.errors import (
+    NotAuthenticatedError,
+    ProtonCliNotFoundError,
+    RemotePathNotFoundError,
+)
 from ..logging_setup import get_logger
 from ..models.plan import PlanAction
 from ..models.sync_pair import name_is_supported
 from .ignore import IgnoreMatcher
+from .retry import RetryPolicy, retry_async
 from .scanner import ScanSkip
 
 log = get_logger("sync.remote_scanner")
@@ -48,6 +53,23 @@ class RemoteScanResult:
     files: tuple[RemoteScannedFile, ...] = ()
     skips: tuple[ScanSkip, ...] = ()
     errors: tuple[str, ...] = field(default=())
+    #: Entfernte Pfade aller Ordner, die in einer Auflistung gesehen wurden.
+    folders: tuple[str, ...] = field(default=())
+    #: Relative Ordnerpfade, deren Inhalt nicht gelesen werden konnte ("" =
+    #: Wurzel). Dateien darunter gelten als *unbekannt*, nicht als fehlend.
+    failed_prefixes: tuple[str, ...] = field(default=())
+
+    @property
+    def root_failed(self) -> bool:
+        """Wahr, wenn schon der Wurzelordner nicht gelesen werden konnte."""
+        return "" in self.failed_prefixes
+
+    def is_unreadable(self, key: str) -> bool:
+        """Wahr, wenn ``key`` unterhalb eines nicht lesbaren Ordners liegt."""
+        for prefix in self.failed_prefixes:
+            if prefix in ("", key) or key.startswith(prefix + "/"):
+                return True
+        return False
 
     @property
     def total_bytes(self) -> int:
@@ -67,9 +89,20 @@ async def scan_remote_directory(
     max_file_size_bytes: int | None = None,
     concurrency: int = 8,
     progress: RemoteScanProgressCallback | None = None,
+    retry_policy: RetryPolicy | None = None,
 ) -> RemoteScanResult:
-    """Liest die Verzeichnisstruktur unterhalb von ``remote_root`` parallel aus."""
+    """Liest die Verzeichnisstruktur unterhalb von ``remote_root`` parallel aus.
+
+    Voruebergehende Fehler einzelner Ordner werden wiederholt. Bleibt ein
+    Ordner unlesbar, wird er in ``failed_prefixes`` vermerkt, damit der Planer
+    seine Dateien nicht faelschlich fuer "in der Cloud geloescht" haelt. Ist
+    die CLI abgemeldet, bricht der Scan sofort mit der Ausnahme ab.
+    """
     rules = matcher if matcher is not None else IgnoreMatcher()
+    policy = retry_policy if retry_policy is not None else RetryPolicy()
+    folders: list[str] = []
+    failed_prefixes: list[str] = []
+    fatal: list[BaseException] = []
     files: list[RemoteScannedFile] = []
     skips: list[ScanSkip] = []
     errors: list[str] = []
@@ -87,15 +120,24 @@ async def scan_remote_directory(
                 return
             visited_paths.add(current_path)
 
+        if fatal:
+            return
+
+        prefix_key = "" if prefix == PurePosixPath() else prefix.as_posix()
         try:
-            nodes = await adapter.list_dir(current_path)
+            nodes = await retry_async(lambda: adapter.list_dir(current_path), policy=policy)
         except RemotePathNotFoundError:
             log.debug("Entfernter Ordner existiert nicht: %s", current_path)
             nodes = []
+        except (NotAuthenticatedError, ProtonCliNotFoundError) as error:
+            # Jeder weitere Aufruf wuerde genauso scheitern.
+            fatal.append(error)
+            return
         except Exception as error:
-            label = prefix.as_posix() or current_path
+            label = prefix_key or current_path
             async with lock:
                 errors.append(f"{label}: {error}")
+                failed_prefixes.append(prefix_key)
             log.warning("Fehler beim Lesen des entfernten Ordners %s: %s", current_path, error)
             nodes = []
 
@@ -120,6 +162,7 @@ async def scan_remote_directory(
                     continue
 
                 if node.is_folder:
+                    folders.append(node.path)
                     if rules.is_dir_ignored(path_text):
                         skips.append(
                             ScanSkip(
@@ -208,7 +251,16 @@ async def scan_remote_directory(
             w.cancel()
         await asyncio.gather(*workers, return_exceptions=True)
 
-    return RemoteScanResult(files=tuple(files), skips=tuple(skips), errors=tuple(errors))
+    if fatal:
+        raise fatal[0]
+
+    return RemoteScanResult(
+        files=tuple(files),
+        skips=tuple(skips),
+        errors=tuple(errors),
+        folders=tuple(folders),
+        failed_prefixes=tuple(failed_prefixes),
+    )
 
 
 __all__ = [

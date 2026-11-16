@@ -85,6 +85,14 @@ Führe danach `./install.sh` erneut aus, um die isolierte virtuelle Umgebung mit
   * **Ubuntu:** `sudo apt install -y gnome-shell-extension-appindicator`
   * Öffne anschließend die App **Erweiterungen** (*Extensions*) und aktiviere **AppIndicator and KStatusNotifierItem Support**.
 
+### Symptom: Unter KDE Plasma fehlt das Symbol nach der Anmeldung.
+* **Ursache (bis 0.2.0):** Die Anwendung startete per Autostart, bevor die Kontrollleiste bereit war, und meldete sich nur einmal an.
+* **Lösung:** Ab 0.3.0 meldet sich das Symbol automatisch an, sobald der Infobereich erscheint – auch nach einem Neustart von `plasmashell`. Ist das Symbol ausgeblendet: Rechtsklick auf den Infobereich → *Infobereich einrichten* → *Einträge* → ProtonSyncUI auf *Immer anzeigen*.
+
+### Symptom: Nach einem Fedora-Upgrade startet nichts mehr (`ModuleNotFoundError: No module named 'proton_sync_ui'`).
+* **Ursache (bis 0.2.0):** Die Installation lag in einer virtuellen Umgebung, die an die alte Python-Version gebunden war.
+* **Lösung:** Einmalig `./install.sh` der aktuellen Version ausführen. Ab 0.3.0 gibt es keine venv mehr; die Anwendung läuft mit jedem Python ≥ 3.13 des Systems.
+
 ---
 
 ## 5. systemd Hintergrund-Timer starten nicht

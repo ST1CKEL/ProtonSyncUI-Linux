@@ -137,7 +137,14 @@ class SyncPairsView(Gtk.Box):
                 on_delete=self._on_delete_pair,
             )
             last_run = self._activity_repo.get_last_run(pair.uid)
-            row.update_run(last_run, running=self._sync_service.is_running(pair.uid))
+            own_run = self._sync_service.is_running(pair.uid)
+            row.update_run(last_run, running=own_run)
+            if own_run:
+                # Die Zeile wurde neu aufgebaut: Laufzustand (Abbrechen-Knopf,
+                # Fortschritt) wiederherstellen.
+                row.set_busy(True)
+            elif self._window.pair_is_busy(pair.uid):
+                row.set_external_busy()
             self._rows[pair.uid] = row
             self._group.add(row)
 
@@ -177,6 +184,9 @@ class SyncPairsView(Gtk.Box):
         self._pair_repo.set_pair_enabled(pair.uid, enabled=active)
         self._window.toast(f"'{pair.name}' {'aktiviert' if active else 'deaktiviert'}.")
         self.refresh()
+        # Der Timer eines deaktivierten Paars muss verschwinden (und umgekehrt),
+        # sonst scheitert stuendlich ein Lauf an "deaktiviert".
+        self._window.sync_systemd_units(quiet=True)
 
     def _on_show_log(self, pair: SyncPair) -> None:
         self._window.show_log(pair)

@@ -82,8 +82,22 @@ class Repository:
         )
 
     def save_pair(self, pair: SyncPair) -> SyncPair:
-        """Legt ein Sync-Paar an oder aktualisiert es."""
+        """Legt ein Sync-Paar an oder aktualisiert es.
+
+        Aendert sich der lokale oder der entfernte Ordner eines bestehenden
+        Paars, wird der gespeicherte Dateizustand verworfen: Er beschreibt das
+        alte Ordnerpaar. Bliebe er stehen, gaelten alle Dateien am neuen Ziel
+        faelschlich als "bereits synchron" und wuerden nie uebertragen.
+        """
         with transaction(self._connection):
+            previous = self._connection.execute(
+                "SELECT local_path, remote_path FROM sync_pairs WHERE uid = ?", (pair.uid,)
+            ).fetchone()
+            if previous is not None and (
+                previous["local_path"] != str(pair.local_path)
+                or previous["remote_path"] != pair.remote_path
+            ):
+                self._connection.execute("DELETE FROM file_states WHERE pair_uid = ?", (pair.uid,))
             self._connection.execute(
                 """
                 INSERT INTO sync_pairs (
@@ -310,6 +324,30 @@ class Repository:
         if run_id is None:  # pragma: no cover
             raise RuntimeError("SQLite hat keine Lauf-Kennung geliefert.")
         return run_id
+
+    def close_stale_runs(self, pair_uid: str) -> int:
+        """Vermerkt haengengebliebene Laeufe eines Paars als abgebrochen.
+
+        Darf nur aufgerufen werden, waehrend der Aufrufer die Laufsperre des
+        Paars haelt -- dann kann kein anderer Lauf tatsaechlich aktiv sein.
+        Gibt die Anzahl der bereinigten Eintraege zurueck.
+        """
+        with transaction(self._connection):
+            cursor = self._connection.execute(
+                """
+                UPDATE runs SET status = ?, finished_at = COALESCE(finished_at, started_at),
+                    message = ?
+                WHERE pair_uid = ? AND status IN (?, ?)
+                """,
+                (
+                    RunStatus.CANCELLED.value,
+                    "Der Lauf wurde unterbrochen (Abmeldung, Neustart oder Absturz).",
+                    pair_uid,
+                    RunStatus.RUNNING.value,
+                    RunStatus.PENDING.value,
+                ),
+            )
+        return cursor.rowcount
 
     def finish_run(self, record: RunRecord) -> None:
         """Schreibt Endstatus, Kennzahlen und Dateifehler eines Laufs."""

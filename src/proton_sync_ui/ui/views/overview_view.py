@@ -11,13 +11,14 @@ gi.require_version("Adw", "1")
 from gi.repository import Adw, GLib, Gtk  # noqa: E402
 
 from ...models.run import RunStatus  # noqa: E402
-from ...paths import format_size  # noqa: E402
+from ...paths import format_size, format_timestamp  # noqa: E402
 from ...services.contracts import (  # noqa: E402
     ActivityRepository,
     ConflictService,
     SyncPairRepository,
     SyncService,
 )
+from ..tray import TrayState  # noqa: E402
 
 if TYPE_CHECKING:
     from ..window import MainWindow
@@ -122,38 +123,35 @@ class OverviewView(Gtk.Box):
     def refresh(self) -> None:
         pairs = self._pair_repo.list_pairs()
         recent_runs = self._activity_repo.list_recent_runs(limit=5)
-        conflicts = self._conflict_service.list_conflicts()
-        self._window.update_conflict_badge(len(conflicts))
+        conflicts = self._window.conflict_count
 
         # Statuskarte auswerten
-        any_running = any(self._sync_service.is_running(p.uid) for p in pairs)
-        any_error = (
-            any(r.status is RunStatus.ERROR for r in recent_runs[: len(pairs)]) if pairs else False
-        )
+        state, state_text = self._window.overall_state()
+        any_running = state is TrayState.SYNCING
+        any_error = state is TrayState.ERROR
 
         self._status_icon.remove_css_class("success")
         self._status_icon.remove_css_class("accent")
         self._status_icon.remove_css_class("warning")
         self._status_icon.remove_css_class("error")
+        self._status_icon.remove_css_class("dim-label")
 
         if any_running:
             self._status_icon.set_from_icon_name("emblem-synchronizing-symbolic")
             self._status_icon.add_css_class("accent")
             self._title_label.set_label("Synchronisierung laeuft")
-            self._subtitle_label.set_label("Dateien werden uebertragen und abgeglichen.")
-        elif conflicts:
-            self._status_icon.set_from_icon_name("emblem-important-symbolic")
-            self._status_icon.add_css_class("warning")
-            self._title_label.set_label(f"{len(conflicts)} Konflikt(e) erfordert Aufmerksamkeit")
-            self._subtitle_label.set_label(
-                "Waehle in der Konfliktansicht, welche Fassungen beibehalten werden sollen."
-            )
+            self._subtitle_label.set_label(state_text)
         elif any_error:
             self._status_icon.set_from_icon_name("dialog-error-symbolic")
             self._status_icon.add_css_class("error")
-            self._title_label.set_label("Synchronisierungsfehler aufgetreten")
+            self._title_label.set_label("Synchronisierung nicht moeglich")
+            self._subtitle_label.set_label(state_text)
+        elif conflicts:
+            self._status_icon.set_from_icon_name("emblem-important-symbolic")
+            self._status_icon.add_css_class("warning")
+            self._title_label.set_label(f"{conflicts} Konflikt(e) erfordern Aufmerksamkeit")
             self._subtitle_label.set_label(
-                "Ein oder mehrere Durchgaenge konnten nicht abgeschlossen werden."
+                "Waehle in der Konfliktansicht, welche Fassungen beibehalten werden sollen."
             )
         elif not pairs:
             self._status_icon.set_from_icon_name("folder-remote-symbolic")
@@ -173,7 +171,7 @@ class OverviewView(Gtk.Box):
         # Letzter Lauf Meta
         if recent_runs:
             last = recent_runs[0]
-            ts = last.finished_at.strftime("%d.%m.%Y %H:%M") if last.finished_at else "kürzlich"
+            ts = format_timestamp(last.finished_at) if last.finished_at else "laeuft"
             self._meta_label.set_label(f"Letzter Lauf: {ts} · {last.summary_line()}")
         else:
             self._meta_label.set_label("Noch kein Durchgang ausgefuehrt")
@@ -195,12 +193,14 @@ class OverviewView(Gtk.Box):
             for run in recent_runs:
                 pair = self._pair_repo.get_pair(run.pair_uid)
                 pair_name = pair.name if pair else "Unbekannt"
-                ts = run.finished_at.strftime("%H:%M") if run.finished_at else "Laeuft"
-                icon_name = (
-                    "emblem-ok-symbolic"
-                    if run.status is RunStatus.SUCCESS
-                    else "dialog-error-symbolic"
-                )
+                ts = format_timestamp(run.finished_at) if run.finished_at else "laeuft"
+                icon_name = {
+                    RunStatus.SUCCESS: "emblem-ok-symbolic",
+                    RunStatus.RUNNING: "emblem-synchronizing-symbolic",
+                    RunStatus.PENDING: "emblem-synchronizing-symbolic",
+                    RunStatus.WARNING: "dialog-warning-symbolic",
+                    RunStatus.CANCELLED: "process-stop-symbolic",
+                }.get(run.status, "dialog-error-symbolic")
 
                 act_row = Adw.ActionRow(
                     title=GLib.markup_escape_text(f"{pair_name} ({ts})"),
@@ -216,11 +216,19 @@ class OverviewView(Gtk.Box):
                 self._activity_rows.append(act_row)
 
     def _on_sync_all_clicked(self, _button: Gtk.Button) -> None:
+        self.sync_all()
+
+    def sync_all(self, *, quiet: bool = False) -> None:
+        """Startet alle aktiven Sync-Paare, die nicht bereits laufen."""
         count = 0
         for pair in self._pair_repo.list_pairs():
-            if pair.enabled and not self._sync_service.is_running(pair.uid):
+            # Auch Laeufe des systemd-Timers zaehlen: Ein zweiter Start wuerde
+            # nur an der Laufsperre scheitern.
+            if pair.enabled and not self._window.pair_is_busy(pair.uid):
                 self._sync_service.start_sync(pair)
                 count += 1
+        if quiet:
+            return
         if count > 0:
             self._window.toast(f"{count} Sync-Paar(e) gestartet.")
         else:

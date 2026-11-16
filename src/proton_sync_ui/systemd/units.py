@@ -24,7 +24,7 @@ SERVICE_TEMPLATE_NAME: Final = "proton-sync-ui@.service"
 #: Ziel der Documentation-Zeile. Bewusst eine URL und keine Manpage:
 #: ``systemd-analyze verify`` beanstandet einen man:-Verweis, zu dem keine
 #: Handbuchseite installiert ist.
-DOCUMENTATION_URL: Final = "https://github.com/protonsyncui/proton-sync-ui#systemd-timer"
+DOCUMENTATION_URL: Final = "https://github.com/ST1CKEL/ProtonSyncUI-Linux#readme"
 
 #: UUIDs bestehen nur aus Hexziffern und Bindestrichen und sind damit ohne
 #: Maskierung als systemd-Instanzname verwendbar. Alles andere wird abgelehnt.

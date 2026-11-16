@@ -223,6 +223,7 @@ class TestNoShellInSource:
             "asyncio.create_subprocess_exec",
             "asyncio.subprocess.DEVNULL",
             "subprocess.run",
+            "subprocess.Popen",
         }, f"Unerwartete subprocess-Aufrufe: {used}"
 
     def test_subprocess_is_only_imported_where_expected(self) -> None:
@@ -231,9 +232,12 @@ class TestNoShellInSource:
             for path in self._python_sources()
             if re.search(r"^\s*(import|from)\s+subprocess", path.read_text("utf-8"), re.M)
         }
-        assert users <= {"cli_adapter/adapter.py", "systemd/manager.py"}, (
-            f"Unerwartete Nutzung von subprocess: {users}"
-        )
+        assert users <= {
+            "cli_adapter/adapter.py",
+            "systemd/manager.py",
+            "update.py",
+            "launcher.py",
+        }, f"Unerwartete Nutzung von subprocess: {users}"
 
 
 class TestRealProcessExecution:

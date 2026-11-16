@@ -27,7 +27,11 @@ from typing import Final
 from ..cli_adapter import capabilities
 from ..cli_adapter.adapter import ProtonDriveAdapter
 from ..cli_adapter.commands import remote_parent_and_name
-from ..cli_adapter.errors import ProtonCliError
+from ..cli_adapter.errors import (
+    NotAuthenticatedError,
+    ProtonCliError,
+    ProtonCliNotFoundError,
+)
 from ..logging_setup import get_logger
 from ..models.plan import PlanAction, PlanItem, UploadPlan
 from ..models.run import FileError, RunRecord, RunStatus
@@ -44,6 +48,19 @@ log = get_logger("sync.engine")
 
 #: Nach so vielen Laeufen wird die Historie eines Paars beschnitten.
 RUN_HISTORY_LIMIT: Final = 200
+
+#: Schlagen so viele Dateien *in Folge* fehl, wird der Lauf beendet. Dann
+#: liegt kein Problem einzelner Dateien vor, sondern ein allgemeines (Netz,
+#: Dienst, Kontingent) -- und tausende weitere Versuche wuerden Proton Drive
+#: nur mit aussichtslosen Anfragen ueberziehen.
+MAX_CONSECUTIVE_FAILURES: Final = 20
+
+#: Fehler, nach denen jeder weitere CLI-Aufruf ebenfalls scheitern wuerde.
+FATAL_ERRORS: Final = (NotAuthenticatedError, ProtonCliNotFoundError)
+
+
+class RunAbortedError(Exception):
+    """Der Lauf wurde vorzeitig beendet; die Meldung ist zur Anzeige geeignet."""
 
 
 class SyncPhase(StrEnum):
@@ -123,6 +140,8 @@ class SyncEngine:
         self._progress = progress
         self._source = source
         self._known_folders: set[str] = set()
+        self._listed_folders: set[str] = set()
+        self._consecutive_failures = 0
 
     # ------------------------------------------------------------------
     # Oeffentliche Schnittstelle
@@ -142,9 +161,21 @@ class SyncEngine:
 
     async def _execute(self, pair: SyncPair, *, dry_run: bool) -> tuple[RunRecord, UploadPlan]:
         self._known_folders.clear()
+        self._listed_folders.clear()
+        self._consecutive_failures = 0
         empty_plan = UploadPlan.from_items(pair.uid, [])
 
         with run_lock(self._repository.connection, pair.uid, source=self._source):
+            # Wir halten die Sperre: Jeder andere "laufende" Eintrag dieses
+            # Paars stammt von einem Prozess, der nicht mehr existiert
+            # (Abmeldung, Neustart, Absturz).
+            stale = self._repository.close_stale_runs(pair.uid)
+            if stale:
+                log.info(
+                    "%d unterbrochene(r) Lauf/Laeufe als abgebrochen vermerkt.",
+                    stale,
+                    extra={"pair_uid": pair.uid},
+                )
             run_id = self._repository.start_run(pair.uid, dry_run=dry_run)
             record = RunRecord(pair_uid=pair.uid, run_id=run_id, dry_run=dry_run)
             record.status = RunStatus.RUNNING
@@ -174,6 +205,15 @@ class SyncEngine:
             except asyncio.CancelledError:
                 self._finish_cancelled(pair, record)
                 raise
+            except (ProtonCliError, RunAbortedError) as error:
+                # Erwartbare Betriebsfehler (abgemeldet, Netz weg): ohne Traceback.
+                message = str(error)
+                record.fail(message)
+                self._repository.finish_run(record)
+                log.error(
+                    "Lauf abgebrochen: %s", message, extra={"pair_uid": pair.uid, "run_id": run_id}
+                )
+                return record, empty_plan
             except Exception as error:
                 message = f"Fehler bei der Planerstellung: {error}"
                 record.fail(message)
@@ -222,6 +262,22 @@ class SyncEngine:
             except asyncio.CancelledError:
                 self._finish_cancelled(pair, record)
                 raise
+            except (ProtonCliError, RunAbortedError) as error:
+                # Bereits uebertragene Dateien sind verbucht und bleiben es;
+                # der naechste Lauf setzt dort fort.
+                message = (
+                    f"{error} -- {record.transferred_files} von {record.planned_files} "
+                    "Datei(en) wurden zuvor uebertragen."
+                    if record.transferred_files
+                    else str(error)
+                )
+                record.fail(message)
+                with contextlib.suppress(Exception):
+                    self._repository.finish_run(record)
+                log.error(
+                    "Lauf abgebrochen: %s", message, extra={"pair_uid": pair.uid, "run_id": run_id}
+                )
+                return record, plan
             except Exception as error:
                 # Unerwartet (z. B. Datenbankfehler): den Lauf nicht als
                 # "laeuft" haengen lassen.
@@ -233,6 +289,16 @@ class SyncEngine:
                 return record, plan
 
             record.finish(message=plan.describe())
+            deferred = len(plan.by_action(PlanAction.SKIP_REMOTE_UNKNOWN))
+            if deferred:
+                # Teile der Cloud waren nicht lesbar: nicht als "alles
+                # synchron" melden.
+                if record.status is RunStatus.SUCCESS:
+                    record.status = RunStatus.WARNING
+                record.message = (
+                    f"{record.message} -- {deferred} Datei(en) zurueckgestellt, weil "
+                    "Cloud-Ordner nicht gelesen werden konnten"
+                )
             self._repository.finish_run(record)
             self._repository.prune_runs(pair.uid, keep=RUN_HISTORY_LIMIT)
 
@@ -323,7 +389,13 @@ class SyncEngine:
                 max_file_size_bytes=pair.max_file_size_bytes,
                 concurrency=8,
                 progress=_on_remote_progress,
+                retry_policy=self._retry_policy,
             )
+            if remote_scan.root_failed:
+                detail = remote_scan.errors[0] if remote_scan.errors else pair.remote_path
+                raise RunAbortedError(f"Proton Drive konnte nicht gelesen werden: {detail}")
+            # Was der Scan gesehen hat, muss spaeter nicht erneut angelegt werden.
+            self._known_folders.update(remote_scan.folders)
 
         self._emit(
             SyncProgress(
@@ -425,6 +497,7 @@ class SyncEngine:
                     )
 
                 processed_items += 1
+                self._note_outcome(error)
 
         # --- Phase 2: Uploads (Lokal -> Cloud) ---
         if uploads:
@@ -497,6 +570,7 @@ class SyncEngine:
                     )
 
                 processed_items += 1
+                self._note_outcome(error)
 
         self._emit(
             SyncProgress(
@@ -607,6 +681,8 @@ class SyncEngine:
                 return local_error(error, "Lokaler Schreibfehler")
         except asyncio.CancelledError:
             raise
+        except FATAL_ERRORS:
+            raise
         except ProtonCliError as error:
             return FileError(
                 relative_path=item.posix_path,
@@ -669,6 +745,8 @@ class SyncEngine:
             )
         except asyncio.CancelledError:
             raise
+        except FATAL_ERRORS:
+            raise
         except ProtonCliError as error:
             return FileError(
                 relative_path=item.posix_path,
@@ -685,8 +763,28 @@ class SyncEngine:
             )
         return None
 
+    def _note_outcome(self, error: FileError | None) -> None:
+        """Zaehlt Fehlschlaege in Folge und beendet aussichtslose Laeufe."""
+        if error is None:
+            self._consecutive_failures = 0
+            return
+        self._consecutive_failures += 1
+        if self._consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
+            raise RunAbortedError(
+                f"{self._consecutive_failures} Dateien in Folge sind fehlgeschlagen; der Lauf "
+                f"wurde beendet. Letzter Fehler: {error.message}"
+            )
+
     async def _ensure_remote_folder(self, remote_path: str) -> None:
-        """Legt einen Zielordner samt fehlender Zwischenebenen an."""
+        """Legt einen Zielordner samt fehlender Zwischenebenen an.
+
+        Ob ein Ordner schon existiert, wird ueber die Auflistung des
+        Elternordners festgestellt -- nicht ueber den Fehlertext von
+        ``create-folder``. Der ist sprachabhaengig ("Datei oder Ordner mit
+        diesem Namen existiert bereits.") und wurde frueher als unbekannter
+        Fehler gewertet, womit jeder Upload in einen bestehenden Ordner
+        scheiterte.
+        """
         if remote_path in self._known_folders or remote_path in KNOWN_REMOTE_SECTIONS:
             self._known_folders.add(remote_path)
             return
@@ -697,10 +795,41 @@ class SyncEngine:
             return
 
         await self._ensure_remote_folder(parent)
-        created = await self._adapter.create_folder(parent, name)
+        if await self._remote_folder_listed(parent, remote_path):
+            return
+
+        try:
+            created = await self._adapter.create_folder(parent, name)
+        except FATAL_ERRORS:
+            raise
+        except ProtonCliError:
+            # Moeglicherweise hat ein paralleler Lauf (oder ein frueherer,
+            # abgebrochener Versuch) den Ordner inzwischen angelegt.
+            if await self._remote_folder_listed(parent, remote_path, refresh=True):
+                return
+            raise
         self._known_folders.add(remote_path)
         if created:
             log.info("Zielordner angelegt: %s", remote_path)
+
+    async def _remote_folder_listed(
+        self, parent: str, remote_path: str, *, refresh: bool = False
+    ) -> bool:
+        """Prueft anhand der Auflistung von ``parent``, ob ``remote_path`` existiert."""
+        if refresh or parent not in self._listed_folders:
+            try:
+                nodes = await self._adapter.list_dir(parent)
+            except FATAL_ERRORS:
+                raise
+            except ProtonCliError as error:
+                log.debug("Elternordner %s nicht auflistbar: %s", parent, error)
+                return False
+            self._listed_folders.add(parent)
+            base = parent.rstrip("/")
+            for node in nodes:
+                if node.name and not node.is_file:
+                    self._known_folders.add(f"{base}/{node.name}")
+        return remote_path in self._known_folders
 
     # ------------------------------------------------------------------
     # Nachbereitung
@@ -792,8 +921,10 @@ def conflict_path_for(local_file: Path) -> Path:
 
 
 __all__ = [
+    "MAX_CONSECUTIVE_FAILURES",
     "RUN_HISTORY_LIMIT",
     "ProgressCallback",
+    "RunAbortedError",
     "SyncEngine",
     "SyncPhase",
     "SyncProgress",

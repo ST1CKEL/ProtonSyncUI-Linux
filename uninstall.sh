@@ -16,6 +16,7 @@ CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
 STATE_HOME="${XDG_STATE_HOME:-$HOME/.local/state}"
 
 VENV_DIR="$DATA_HOME/proton-sync-ui/venv"
+APP_DIR="$DATA_HOME/proton-sync-ui/app"
 BIN_DIR="$HOME/.local/bin"
 APPS_DIR="$DATA_HOME/applications"
 ICON_DIR="$DATA_HOME/icons/hicolor/scalable/apps"
@@ -31,8 +32,8 @@ warn() { printf '   \033[1;33m!\033[0m %s\n' "$*"; }
 info "Zeitgesteuerte Laeufe abschalten"
 # ---------------------------------------------------------------------------
 
-if [[ -x "$VENV_DIR/bin/proton-sync-ui" ]]; then
-    "$VENV_DIR/bin/proton-sync-ui" systemd remove >/dev/null 2>&1 && ok "systemd-Units entfernt" \
+if [[ -x "$BIN_DIR/proton-sync-ui" ]]; then
+    "$BIN_DIR/proton-sync-ui" systemd remove >/dev/null 2>&1 && ok "systemd-Units entfernt" \
         || warn "systemd-Units konnten nicht ueber die Anwendung entfernt werden."
 fi
 
@@ -57,11 +58,13 @@ for cmd in proton-sync-ui proton-sync-ui-gui; do
     fi
 done
 
-if [[ -d "$VENV_DIR" ]]; then
-    rm -rf "$VENV_DIR"
-    rmdir "$(dirname "$VENV_DIR")" 2>/dev/null || true
-    ok "Laufzeitumgebung geloescht"
-fi
+for dir in "$APP_DIR" "$VENV_DIR"; do
+    if [[ -d "$dir" ]]; then
+        rm -rf "$dir"
+        ok "$dir"
+    fi
+done
+rmdir "$DATA_HOME/proton-sync-ui" 2>/dev/null || true
 
 for path in "$APPS_DIR/$APP_ID.desktop" "$ICON_DIR/$APP_ID.svg" "$CONFIG_HOME/autostart/$APP_ID.desktop"; do
     if [[ -e "$path" ]]; then

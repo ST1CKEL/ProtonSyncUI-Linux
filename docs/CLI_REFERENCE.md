@@ -35,6 +35,9 @@ proton-sync-ui [OPTIONEN] BEFEHL [ARGUMENTE...]
 | `systemd status` | Zeigt den Zustand aller systemd-Timer an. |
 | `systemd remove` | Entfernt alle ProtonSyncUI systemd-Timer und Services. |
 | `logs` | Gibt die neuesten Einträge aus der Protokolldatei aus. |
+| `autostart on\|off\|status` | Schaltet den Start bei der Anmeldung (`--window`: mit sichtbarem Fenster). |
+| `update [--check]` | Sucht nach einer neuen Version und installiert sie (`--check`: nur prüfen). |
+| `doctor` | Prüft CLI, Anmeldung, systemd und Datenbank. |
 
 ---
 

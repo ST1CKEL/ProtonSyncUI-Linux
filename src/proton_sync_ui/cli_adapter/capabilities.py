@@ -21,6 +21,11 @@ _CLI_VERSION_RE: Final = re.compile(r"cli-drive@(?P<version>[0-9][^\s+]*)")
 # "Proton Drive SDK js@0.21.0+06e8c605"
 _SDK_VERSION_RE: Final = re.compile(r"js@(?P<version>[0-9][^\s+]*)")
 
+# "A newer version is available: 0.9.0 (you have 0.8.0)."
+_NEWER_CLI_RE: Final = re.compile(
+    r"newer version is available:\s*(?P<version>[0-9][0-9A-Za-z.\-]*)"
+)
+
 #: Aelteste Fassung, gegen die dieser Adapter geprueft wurde.
 VERIFIED_CLI_VERSION: Final = "0.8.0"
 
@@ -36,6 +41,16 @@ class Capabilities:
     sdk_version: str = ""
     authenticated: bool = False
     problem: str = ""
+    #: Neuere CLI-Fassung, auf die ``proton-drive --version`` selbst hinweist.
+    newer_cli_version: str = ""
+    #: Der Anmeldezustand liess sich nicht ermitteln (z. B. kein Netz). Das
+    #: ist etwas anderes als "abgemeldet" und verlangt keine neue Anmeldung.
+    auth_check_failed: bool = False
+
+    @property
+    def needs_login(self) -> bool:
+        """Wahr, wenn die CLI vorhanden, aber sicher nicht angemeldet ist."""
+        return self.available and not self.authenticated and not self.auth_check_failed
 
     @property
     def usable(self) -> bool:
@@ -88,6 +103,8 @@ async def probe(
         )
 
     cli_version, sdk_version = parse_version(raw_version)
+    newer_match = _NEWER_CLI_RE.search(raw_version)
+    newer_cli_version = newer_match.group("version").rstrip(".") if newer_match else ""
     if cli_version and cli_version != VERIFIED_CLI_VERSION:
         log.info(
             "CLI-Version %s weicht von der geprueften Fassung %s ab. "
@@ -103,10 +120,13 @@ async def probe(
             raw_version=raw_version,
             cli_version=cli_version,
             sdk_version=sdk_version,
+            newer_cli_version=newer_cli_version,
         )
 
     try:
         authenticated = await cli.check_authenticated()
+    except ProtonCliNotFoundError as error:
+        return Capabilities(binary_path=None, available=False, problem=str(error))
     except ProtonCliError as error:
         return Capabilities(
             binary_path=binary,
@@ -114,7 +134,9 @@ async def probe(
             raw_version=raw_version,
             cli_version=cli_version,
             sdk_version=sdk_version,
+            newer_cli_version=newer_cli_version,
             problem=f"Der Anmeldezustand konnte nicht geprueft werden: {error}",
+            auth_check_failed=True,
         )
 
     problem = (
@@ -122,7 +144,8 @@ async def probe(
         if authenticated
         else (
             "Die Proton-Drive-CLI ist nicht angemeldet.\n\n"
-            "Bitte einmalig im Terminal ausfuehren:\n\n"
+            "Bitte in ProtonSyncUI unter Einstellungen auf 'Anmelden' klicken "
+            "oder im Terminal ausfuehren:\n\n"
             "    proton-drive auth login\n\n"
             "Die Anmeldung oeffnet einen Browser. ProtonSyncUI verarbeitet dabei "
             "keinerlei Zugangsdaten."
@@ -135,6 +158,7 @@ async def probe(
         raw_version=raw_version,
         cli_version=cli_version,
         sdk_version=sdk_version,
+        newer_cli_version=newer_cli_version,
         authenticated=authenticated,
         problem=problem,
     )

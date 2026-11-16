@@ -1,4 +1,4 @@
-"""ProtonSyncUI -- einseitige Backup-Uploads zu Proton Drive.
+"""ProtonSyncUI -- 2-Wege-Synchronisation und Backups mit Proton Drive.
 
 Die Anwendung spricht Proton Drive ausschliesslich ueber die offizielle
 ``proton-drive``-Kommandozeile an. Es gibt keine direkte API-Nutzung, keine
@@ -9,7 +9,7 @@ dieser Anwendung mit ``proton-drive auth login``.
 
 from __future__ import annotations
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 APP_ID = "io.github.protonsyncui.ProtonSyncUI"
 APP_NAME = "proton-sync-ui"
 APP_TITLE = "ProtonSyncUI"

@@ -72,7 +72,9 @@ ProtonSyncUI verändert keine Systemdateien und benötigt keine Root-Rechte zur 
 
 | Pfad | Zweck |
 |---|---|
-| `~/.local/share/proton-sync-ui/venv` | Isolierte Python-Laufzeitumgebung (mit Zugriff auf System-GTK) |
+| `~/.local/share/proton-sync-ui/app` | Die Anwendung (reines Python, läuft mit dem Python des Systems – keine venv) |
+| `~/.config/autostart/io.github.protonsyncui.ProtonSyncUI.desktop` | Autostart-Eintrag (nur wenn eingeschaltet) |
+| `~/.config/proton-sync-ui/settings.json` | Einstellungen der Oberfläche |
 | `~/.local/bin/proton-sync-ui` | Headless-CLI-Startskript (auch für systemd) |
 | `~/.local/bin/proton-sync-ui-gui` | Grafischer GUI-Starter |
 | `~/.local/share/applications/io.github.protonsyncui.ProtonSyncUI.desktop` | Startmenü-Eintrag |

@@ -24,12 +24,13 @@ import argparse
 import asyncio
 import contextlib
 import logging
+import signal
 import sys
-from collections.abc import Sequence
+from collections.abc import Coroutine, Sequence
 from datetime import datetime
-from typing import Final
+from typing import Any, Final
 
-from .. import APP_TITLE, __version__, paths
+from .. import APP_TITLE, __version__, autostart, paths, update
 from ..cli_adapter import capabilities
 from ..cli_adapter.adapter import ProtonDriveAdapter
 from ..logging_setup import configure_logging, get_logger
@@ -167,6 +168,19 @@ def _print_run_result(record: RunRecord, *, dry_run: bool) -> None:
 # ---------------------------------------------------------------------------
 
 
+async def _run_cancellable[T](coroutine: Coroutine[Any, Any, T]) -> T:
+    """Fuehrt ``coroutine`` aus und bricht sie bei SIGTERM geordnet ab.
+
+    Ohne das beendet systemd den Prozess beim Abmelden hart; der Lauf bliebe
+    in der Historie fuer immer auf "laeuft" stehen.
+    """
+    task = asyncio.ensure_future(coroutine)
+    loop = asyncio.get_running_loop()
+    with contextlib.suppress(NotImplementedError, RuntimeError, ValueError):
+        loop.add_signal_handler(signal.SIGTERM, task.cancel)
+    return await task
+
+
 def cmd_sync(args: argparse.Namespace, *, dry_run: bool) -> int:
     """Fuehrt einen Lauf oder Dry-Run aus."""
     repository = _open_repository()
@@ -199,7 +213,13 @@ def cmd_sync(args: argparse.Namespace, *, dry_run: bool) -> int:
         )
 
         runner = engine.dry_run(pair) if dry_run else engine.sync(pair)
-        record, plan = asyncio.run(runner)
+        try:
+            record, plan = asyncio.run(_run_cancellable(runner))
+        except asyncio.CancelledError:
+            # SIGTERM (Abmeldung, Herunterfahren, "systemctl stop"): Der Lauf
+            # ist bereits als abgebrochen verbucht.
+            print("\nAbgebrochen.", file=sys.stderr)
+            return EXIT_ERROR
 
         if dry_run:
             _print_plan(plan)
@@ -536,6 +556,55 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def cmd_update(args: argparse.Namespace) -> int:
+    """Sucht nach einer neuen Version und installiert sie."""
+    try:
+        info = update.check_for_update()
+    except update.UpdateError as error:
+        print(str(error), file=sys.stderr)
+        return EXIT_ERROR
+
+    print(f"Installiert: {info.current_version}")
+    print(f"Verfuegbar:  {info.latest_version}")
+    if not info.available and not args.force:
+        print("ProtonSyncUI ist aktuell.")
+        return EXIT_OK
+    if args.check:
+        print("Ein Update ist verfuegbar. Installieren mit: proton-sync-ui update")
+        return EXIT_WARNING
+
+    try:
+        update.install_update(info, progress=print)
+    except update.UpdateError as error:
+        print(str(error), file=sys.stderr)
+        return EXIT_ERROR
+    print("Bitte ProtonSyncUI neu starten, damit die neue Version aktiv wird.")
+    return EXIT_OK
+
+
+def cmd_autostart(args: argparse.Namespace) -> int:
+    """Schaltet den Start bei der Anmeldung."""
+    match args.autostart_action:
+        case "on":
+            path = autostart.enable(minimized=not args.window)
+            print(f"Autostart aktiviert: {path}")
+        case "off":
+            removed = autostart.disable()
+            print("Autostart deaktiviert." if removed else "Autostart war nicht aktiv.")
+        case "refresh":
+            refreshed = autostart.refresh()
+            print("Autostart-Eintrag aktualisiert." if refreshed else "Autostart ist nicht aktiv.")
+        case _:
+            if autostart.is_enabled():
+                mode = "minimiert" if autostart.is_minimized() else "mit Fenster"
+                print(f"Autostart ist aktiv ({mode}): {autostart.autostart_file()}")
+            else:
+                print("Autostart ist nicht aktiv.")
+    with contextlib.suppress(Exception):
+        SystemdManager().daemon_reload()
+    return EXIT_OK
+
+
 def cmd_gui(_args: argparse.Namespace) -> int:
     """Startet die grafische Oberflaeche.
 
@@ -649,6 +718,27 @@ def build_parser() -> argparse.ArgumentParser:
         "--offline", action="store_true", help="Anmeldezustand nicht pruefen"
     )
 
+    update_parser = sub.add_parser("update", help="nach Updates suchen und installieren")
+    update_parser.add_argument(
+        "--check", action="store_true", help="nur pruefen, nichts installieren"
+    )
+    update_parser.add_argument(
+        "--force", action="store_true", help="auch ohne neuere Version neu installieren"
+    )
+
+    autostart_parser = sub.add_parser("autostart", help="Start bei der Anmeldung schalten")
+    autostart_parser.add_argument(
+        "autostart_action",
+        choices=("on", "off", "status", "refresh"),
+        nargs="?",
+        default="status",
+        metavar="AKTION",
+        help="on, off, status (Standard) oder refresh",
+    )
+    autostart_parser.add_argument(
+        "--window", action="store_true", help="mit sichtbarem Fenster statt minimiert starten"
+    )
+
     sub.add_parser("gui", help="grafische Oberflaeche starten")
 
     return parser
@@ -687,6 +777,10 @@ def main(argv: Sequence[str] | None = None) -> int:
                 return cmd_systemd(args)
             case "doctor":
                 return cmd_doctor(args)
+            case "update":
+                return cmd_update(args)
+            case "autostart":
+                return cmd_autostart(args)
             case "gui":
                 return cmd_gui(args)
             case _:  # pragma: no cover -- argparse verhindert das

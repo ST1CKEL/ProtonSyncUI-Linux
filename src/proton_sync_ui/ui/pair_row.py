@@ -284,6 +284,19 @@ class PairRow(Adw.ExpanderRow):
         else:
             self._progress_row.set_visible(False)
 
+    def set_external_busy(self) -> None:
+        """Zeigt einen Lauf an, den ein anderer Prozess (systemd-Timer) ausfuehrt.
+
+        Er laesst sich von hier weder abbrechen noch verfolgen; ein zweiter
+        Start wuerde nur an der Laufsperre scheitern.
+        """
+        self._sync_button.set_sensitive(False)
+        self._dry_run_button.set_sensitive(False)
+        self._progress_row.set_visible(True)
+        self._progress_bar.pulse()
+        self._progress_bar.set_text("Laeuft im Hintergrund (Zeitplan)")
+        self._set_status(PairStatus.RUNNING)
+
     def _set_status(self, status: PairStatus) -> None:
         """Setzt Text und Farbe des Statuszeichens."""
         self._status_label.set_label(pair_status_label(status))

@@ -1,6 +1,6 @@
 # Architektur & Komponenten-Design von ProtonSyncUI
 
-Dieses Dokument beschreibt die interne Systemarchitektur, Datenflüsse, Entwurfsmuster und Sicherheitsgarantien von **ProtonSyncUI (v0.2.0)**.
+Dieses Dokument beschreibt die interne Systemarchitektur, Datenflüsse, Entwurfsmuster und Sicherheitsgarantien von **ProtonSyncUI (v0.3.0)**.
 
 ---
 

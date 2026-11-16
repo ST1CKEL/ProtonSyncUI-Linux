@@ -10,13 +10,14 @@
 
 <p align="center">
   <a href="https://github.com/ST1CKEL/ProtonSyncUI-Linux"><img src="https://img.shields.io/badge/GitHub-Repository-181717?style=flat-square&logo=github&logoColor=white" alt="GitHub Repo"></a>
-  <img src="https://img.shields.io/badge/Python-3.10%2B-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python 3.10+">
+  <img src="https://img.shields.io/badge/Python-3.13%2B-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python 3.13+">
   <img src="https://img.shields.io/badge/GTK-4.0-4A90D9?style=flat-square&logo=gnome&logoColor=white" alt="GTK4">
   <img src="https://img.shields.io/badge/libadwaita-1.4%2B-4A90D9?style=flat-square&logo=gnome&logoColor=white" alt="libadwaita">
   <img src="https://img.shields.io/badge/Tray-StatusNotifierItem-00C2B8?style=flat-square" alt="System Tray Support">
   <img src="https://img.shields.io/badge/Linux-Fedora%20%7C%20Ubuntu%20%7C%20Debian%20%7C%20Arch%20%7C%20openSUSE-51A2DA?style=flat-square&logo=linux&logoColor=white" alt="Linux Distros">
   <img src="https://img.shields.io/badge/License-MIT-green?style=flat-square" alt="License MIT">
-  <img src="https://img.shields.io/badge/Tests-406%20passed-brightgreen?style=flat-square" alt="Tests">
+  <img src="https://img.shields.io/badge/Tests-465%20passed-brightgreen?style=flat-square" alt="Tests">
+  <img src="https://img.shields.io/badge/Version-0.3.0-0EA5A8?style=flat-square" alt="Version 0.3.0">
 </p>
 
 ---
@@ -25,11 +26,14 @@
 
 - 🔄 **Echte 2-Wege-Synchronisation (Cloud ⇄ Lokal)**: Erkennt Änderungen auf beiden Seiten und gleicht sie nahtlos ab. Unterstützt zudem reine Upload- und Download-Modi.
 - 🎨 **Modernes GNOME / libadwaita Design**: Folgt den GNOME Human Interface Guidelines (HIG) mit adaptivem Layout (`Adw.NavigationSplitView`), Dark-Mode-Unterstützung und flüssigen Animationen.
-- 📥 **System-Tray & Hintergrund-Betrieb**: Läuft im Infobereich über das standardisierte `StatusNotifierItem` & `DBusMenu`-Protokoll (KDE, GNOME AppIndicator, XFCE, Sway/Waybar).
+- 📥 **System-Tray & Hintergrund-Betrieb**: Läuft im Infobereich über das standardisierte `StatusNotifierItem` & `DBusMenu`-Protokoll (KDE Plasma, GNOME AppIndicator, XFCE, Sway/Waybar). Das Symbol zeigt den Zustand mit farbiger Marke (Sync, Warnung, Fehler) und meldet sich nach einem Neustart der Kontrollleiste selbst wieder an.
+- 🚀 **Autostart bei der Anmeldung**: Startet auf Wunsch mit der Arbeitsfläche, minimiert im Infobereich. Die Installation kommt ohne virtuelle Umgebung aus und übersteht Distributions-Upgrades (z. B. Fedora 44 → 45).
+- ⬆️ **Eingebaute Update-Funktion**: Sucht höchstens einmal täglich nach einer neuen Version und installiert sie nach Bestätigung – in der Oberfläche oder per `proton-sync-ui update`.
+- 🔑 **Anmeldung per Klick**: Ist Proton Drive abgemeldet, weist eine Hinweisleiste darauf hin und startet die Anmeldung der offiziellen CLI.
 - ⏱️ **systemd User-Timer**: Vollständig integrierte, native Hintergrundsynchronisation im Benutzerprofil (`systemd --user`) – zuverlässig, ressourcenschonend und ohne Root-Rechte.
 - ⚖️ **Visuelles Konflikt-Center**: Bei gleichzeitigen Änderungen schützt ProtonSyncUI deine Daten mit 1-Klick-Lösungsstrategien (*Beide behalten*, *Lokal bevorzugen*, *Cloud bevorzugen*).
 - 🛡️ **100% Zero-Knowledge & Datenschutz**: Keine Weitergabe von Passwörtern oder Tokens; die kryptografische Authentifizierung verbleibt vollständig bei der offiziellen `proton-drive` CLI. 0% Telemetrie.
-- ⚡ **Crash-Sicherheit & Atomarer Schutz**: Speicherung des Zustands in einer SQLite-Datenbank (Schema v2). Keine doppelten Übertragungen bei Verbindungsabbrüchen.
+- ⚡ **Crash-Sicherheit & Atomarer Schutz**: Speicherung des Zustands in einer SQLite-Datenbank (Schema v3). Keine doppelten Übertragungen bei Verbindungsabbrüchen; aussichtslose Läufe (abgemeldet, Dienst nicht erreichbar) enden sofort statt tausende Anfragen zu senden.
 - 🖥️ **Headless CLI**: Volle Steuerbarkeit auch auf Servern oder in Skripten ohne Desktop-Umgebung.
 
 ---
@@ -64,7 +68,7 @@
 ---
 
 ### 4. Einstellungen & System-Integration (`Settings`)
-> Konfiguration von Desktop-Benachrichtigungen, Autostart beim Anmelden (auch minimiert im Infobereich) und Live-CLI-Diagnose.
+> Autostart beim Anmelden (auch minimiert im Infobereich), Desktop-Benachrichtigungen, eingebaute Update-Funktion sowie Anmeldung und Zustand der Proton-Drive-CLI.
 
 <p align="center">
   <img src="docs/screenshots/settings.png" alt="Einstellungen" width="90%">
@@ -124,7 +128,7 @@ Der Planer vergleicht den Zustand des lokalen Dateisystems, den Remote-Zustand a
 
 | Distribution | Mindestversion | Paketmanager | Installationsbefehl für Abhängigkeiten |
 |---|---|---|---|
-| **Fedora / RHEL** | 39, 40, 41, 42, 43, 44 | `dnf` | `sudo dnf install -y python3-gobject gtk4 libadwaita python3-cairo librsvg2-tools` |
+| **Fedora / RHEL** | 41, 42, 43, 44, 45 (Python ≥ 3.13) | `dnf` | `sudo dnf install -y python3-gobject gtk4 libadwaita python3-cairo librsvg2-tools` |
 | **Ubuntu / Debian** | Ubuntu 24.04+, Debian 12+ | `apt` | `sudo apt install -y python3-gi python3-gi-cairo gir1.2-gtk-4.0 gir1.2-adw-1 libadwaita-1-0 librsvg2-bin` |
 | **Arch Linux / Manjaro** | Rolling Release | `pacman` | `sudo pacman -S --needed python-gobject gtk4 libadwaita python-cairo librsvg` |
 | **openSUSE** | Tumbleweed / Leap 15.6+ | `zypper` | `sudo zypper install -y python3-gobject gtk4 libadwaita-1-0 python3-cairo librsvg-tools` |
@@ -145,9 +149,15 @@ chmod +x install.sh
 ./install.sh
 ```
 
-*(Für automatisierte/nicht-interaktive Installationen: `./install.sh -y`)*
+*(Nicht-interaktiv: `./install.sh -y` · gleich mit Autostart bei der Anmeldung: `./install.sh --autostart`)*
+
+Die Anwendung wird ohne virtuelle Umgebung nach `~/.local/share/proton-sync-ui/app` kopiert und
+läuft mit dem Python des Systems. Sie übersteht damit Distributions-Upgrades (z. B. Fedora 44 → 45)
+ohne Neuinstallation.
 
 ### 3. Bei Proton Drive anmelden (falls noch nicht erfolgt)
+In der Anwendung auf **Anmelden** klicken (Hinweisleiste oder *Einstellungen → Proton Drive*) –
+oder im Terminal:
 ```bash
 proton-drive auth login
 ```
@@ -162,6 +172,16 @@ proton-drive auth login
   ```bash
   proton-sync-ui-gui --minimized
   ```
+
+### 5. Autostart & Updates
+```bash
+proton-sync-ui autostart on     # bei der Anmeldung starten (KDE Plasma, GNOME), minimiert im Infobereich
+proton-sync-ui autostart off
+proton-sync-ui update --check   # nach einer neuen Version suchen
+proton-sync-ui update           # neue Version herunterladen und installieren
+```
+Beides lässt sich auch unter *Einstellungen* schalten. Die Update-Suche läuft auf Wunsch einmal
+täglich automatisch; installiert wird erst nach Bestätigung.
 
 ---
 
@@ -207,14 +227,14 @@ Weitere detaillierte Anleitungen und technische Referenzen findest du im Ordner 
 ## 🛠️ Entwicklung & Tests
 
 ```bash
-# Entwicklerumgebung einrichten
+# Entwicklermodus: die Startbefehle verwenden direkt diesen Quellbaum
 ./install.sh --dev
 
-# Virtuelle Umgebung aktivieren
-source ~/.local/share/proton-sync-ui/venv/bin/activate
+# Entwicklerwerkzeuge (pytest, ruff, mypy)
+python3 -m venv --system-site-packages .venv && .venv/bin/pip install -e ".[dev]"
 
-# Testsuite ausführen (406 Tests)
-PYTHONPATH=src pytest
+# Testsuite ausführen
+PYTHONPATH=src python3 -m pytest
 
 # Code-Qualität & Formatierung prüfen
 ruff check .

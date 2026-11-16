@@ -1,19 +1,31 @@
-"""StatusNotifierItem (SNI) & DBusMenu Taskleisten-Dienst fuer Linux/GNOME/KDE."""
+"""Symbol im Infobereich (StatusNotifierItem + DBusMenu) fuer KDE Plasma und GNOME.
+
+KDE Plasma zeigt Eintraege an, die sich beim ``org.kde.StatusNotifierWatcher``
+anmelden. Drei Dinge sind dabei fuer einen verlaesslichen Betrieb wichtig:
+
+* **Reihenfolge beim Anmelden.** Per Autostart laeuft die Anwendung oft, bevor
+  die Kontrollleiste bereit ist. Statt einmalig zu registrieren, wird der
+  Watcher beobachtet und das Symbol jedes Mal angemeldet, wenn er erscheint --
+  auch nach einem Neustart von ``plasmashell``.
+* **Symbol ohne Abhaengigkeit vom Icon-Thema.** Zusaetzlich zum Namen wird das
+  Symbol als Pixmap geliefert, je Zustand mit farbiger Marke.
+* **Menue-Aktualisierung.** Aendert sich der Zustand, wird ``LayoutUpdated``
+  gesendet, sonst zeigt Plasma ein veraltetes Menue.
+"""
 
 from __future__ import annotations
 
 import os
 from collections.abc import Callable
+from enum import StrEnum
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Final
 
-import cairo
 import gi
 
 gi.require_version("Gio", "2.0")
 gi.require_version("GLib", "2.0")
-gi.require_version("Rsvg", "2.0")
-from gi.repository import Gio, GLib, Rsvg  # noqa: E402
+from gi.repository import Gio, GLib  # noqa: E402
 
 from .. import APP_ID, APP_TITLE  # noqa: E402
 from ..logging_setup import get_logger  # noqa: E402
@@ -22,6 +34,41 @@ if TYPE_CHECKING:
     from .application import ProtonSyncUIApplication
 
 log = get_logger("ui.tray")
+
+WATCHER_NAME: Final = "org.kde.StatusNotifierWatcher"
+WATCHER_PATH: Final = "/StatusNotifierWatcher"
+ITEM_PATH: Final = "/StatusNotifierItem"
+MENU_PATH: Final = "/StatusNotifierMenu"
+ITEM_INTERFACE: Final = "org.kde.StatusNotifierItem"
+MENU_INTERFACE: Final = "com.canonical.dbusmenu"
+
+#: Kantenlaengen der gelieferten Pixmaps (Plasma waehlt die passende aus).
+PIXMAP_SIZES: Final = (16, 22, 24, 32, 48, 64)
+
+# Menue-Kennungen
+MENU_STATUS: Final = 1
+MENU_OPEN: Final = 3
+MENU_SYNC: Final = 4
+MENU_UPDATE: Final = 5
+MENU_QUIT: Final = 7
+
+
+class TrayState(StrEnum):
+    """Zustand, den das Symbol anzeigt."""
+
+    IDLE = "idle"
+    SYNCING = "syncing"
+    WARNING = "warning"
+    ERROR = "error"
+
+
+#: Farbe der Zustandsmarke (RGB) je Zustand; ``None`` = keine Marke.
+_BADGE_COLORS: Final[dict[TrayState, tuple[float, float, float] | None]] = {
+    TrayState.IDLE: None,
+    TrayState.SYNCING: (0.20, 0.52, 0.89),
+    TrayState.WARNING: (0.96, 0.62, 0.04),
+    TrayState.ERROR: (0.88, 0.11, 0.14),
+}
 
 SNI_XML = """
 <node>
@@ -131,188 +178,317 @@ MENU_XML = """
 """
 
 
-def _render_icon_pixmaps() -> list[tuple[int, int, bytes]]:
-    """Rendert IconPixmap in Standard-Tray-Groessen fuer universelle SNI-Kompatibilitaet."""
+def find_icon_file() -> Path | None:
+    """Sucht die SVG-Datei des Anwendungssymbols."""
+    data_home = Path(os.environ.get("XDG_DATA_HOME") or Path.home() / ".local" / "share")
+    candidates = [
+        data_home / "icons" / "hicolor" / "scalable" / "apps" / f"{APP_ID}.svg",
+        Path("/usr/share/icons/hicolor/scalable/apps") / f"{APP_ID}.svg",
+        Path("/usr/local/share/icons/hicolor/scalable/apps") / f"{APP_ID}.svg",
+        # Mitgeliefert im Paket (install.sh) bzw. im Quellbaum.
+        Path(__file__).resolve().parent.parent / "data" / f"{APP_ID}.svg",
+        Path(__file__).resolve().parents[3] / "data" / "icons" / f"{APP_ID}.svg",
+    ]
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+def render_icon_pixmaps(state: TrayState = TrayState.IDLE) -> list[tuple[int, int, bytes]]:
+    """Rendert das Symbol samt Zustandsmarke als ARGB32-Pixmaps (Netzwerk-Bytefolge).
+
+    Fehlen cairo oder librsvg, kommt eine leere Liste zurueck; dann greift
+    allein der Symbolname.
+    """
     try:
-        svg_path = (
-            Path.home()
-            / ".local"
-            / "share"
-            / "icons"
-            / "hicolor"
-            / "scalable"
-            / "apps"
-            / f"{APP_ID}.svg"
-        )
-        if not svg_path.exists():
+        import cairo  # noqa: PLC0415 -- optional
+
+        gi.require_version("Rsvg", "2.0")
+        from gi.repository import Rsvg  # noqa: PLC0415
+
+        svg_path = find_icon_file()
+        if svg_path is None:
             return []
         handle = Rsvg.Handle.new_from_file(str(svg_path))
+        badge = _BADGE_COLORS.get(state)
         results: list[tuple[int, int, bytes]] = []
-        for size in (22, 24, 32, 48):
+        for size in PIXMAP_SIZES:
             surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, size, size)
-            cr = cairo.Context(surface)
-            cr.scale(size / 128.0, size / 128.0)
-            handle.render_cairo(cr)
-            bgra = bytearray(surface.get_data().tobytes())
-            argb = bytearray(len(bgra))
-            for i in range(0, len(bgra), 4):
-                argb[i] = bgra[i + 3]  # Alpha
-                argb[i + 1] = bgra[i + 2]  # Red
-                argb[i + 2] = bgra[i + 1]  # Green
-                argb[i + 3] = bgra[i]  # Blue
-            results.append((size, size, bytes(argb)))
+            context = cairo.Context(surface)
+            viewport = Rsvg.Rectangle()
+            viewport.x, viewport.y, viewport.width, viewport.height = 0, 0, size, size
+            handle.render_document(context, viewport)
+
+            if badge is not None:
+                radius = size * 0.24
+                center = size - radius - size * 0.02
+                context.arc(center, center, radius + size * 0.05, 0, 6.2832)
+                context.set_source_rgb(1, 1, 1)
+                context.fill()
+                context.arc(center, center, radius, 0, 6.2832)
+                context.set_source_rgb(*badge)
+                context.fill()
+
+            surface.flush()
+            results.append((size, size, _cairo_to_argb(bytes(surface.get_data()))))
         return results
-    except Exception as err:
-        log.debug("IconPixmap konnte nicht gerendert werden: %s", err)
+    except Exception as error:
+        log.debug("Symbol-Pixmap konnte nicht gerendert werden: %s", error)
         return []
 
 
+def _cairo_to_argb(data: bytes) -> bytes:
+    """Wandelt cairo-ARGB32 (vormultipliziert, native Bytefolge) in ARGB (Big Endian)."""
+    import sys  # noqa: PLC0415
+
+    source = bytearray(data)
+    if sys.byteorder == "little":
+        blue, green, red, alpha = source[0::4], source[1::4], source[2::4], source[3::4]
+    else:  # pragma: no cover -- Big-Endian-Rechner
+        alpha, red, green, blue = source[0::4], source[1::4], source[2::4], source[3::4]
+
+    # Vormultiplikation rueckgaengig machen (nur an halbtransparenten Kanten noetig).
+    for index, value in enumerate(alpha):
+        if 0 < value < 255:
+            red[index] = min(255, red[index] * 255 // value)
+            green[index] = min(255, green[index] * 255 // value)
+            blue[index] = min(255, blue[index] * 255 // value)
+
+    result = bytearray(len(source))
+    result[0::4], result[1::4], result[2::4], result[3::4] = alpha, red, green, blue
+    return bytes(result)
+
+
 class TrayService:
-    """Taskleisten- und Infobereich-Dienst (StatusNotifierItem & DBusMenu)."""
+    """Symbol im Infobereich samt Kontextmenue."""
 
     def __init__(
         self,
-        app: ProtonSyncUIApplication,
+        app: ProtonSyncUIApplication | None,
         *,
         on_show_window: Callable[[], None],
         on_sync_all: Callable[[], None],
         on_quit: Callable[[], None],
+        on_check_update: Callable[[], None] | None = None,
     ) -> None:
         self._app = app
         self._on_show_window = on_show_window
         self._on_sync_all = on_sync_all
         self._on_quit = on_quit
+        self._on_check_update = on_check_update
 
         self._connection: Gio.DBusConnection | None = None
-        self._sni_reg_id: int = 0
-        self._menu_reg_id: int = 0
-        self._bus_name_id: int = 0
+        self._sni_reg_id = 0
+        self._menu_reg_id = 0
+        self._bus_name_id = 0
+        self._watch_id = 0
+        self._bus_name = ""
+        self._name_acquired = False
+        self._watcher_present = False
+        self._registered = False
 
         self._title = APP_TITLE
-        self._status_text = "Alles synchronisiert"
-        self._icon_name = APP_ID
-        self._is_syncing = False
-        self._has_error = False
-        self._icon_pixmaps: list[tuple[int, int, bytes]] = []
+        self._status_text = "Bereit"
+        self._state = TrayState.IDLE
+        self._menu_revision = 1
+        self._pixmap_cache: dict[TrayState, list[tuple[int, int, bytes]]] = {}
 
         self._sni_info = Gio.DBusNodeInfo.new_for_xml(SNI_XML).interfaces[0]
         self._menu_info = Gio.DBusNodeInfo.new_for_xml(MENU_XML).interfaces[0]
 
+    # ------------------------------------------------------------------
+    # Lebenszyklus
+    # ------------------------------------------------------------------
+
+    @property
+    def registered(self) -> bool:
+        """Wahr, wenn eine Arbeitsflaeche das Symbol aktuell anzeigt."""
+        return self._registered
+
+    @property
+    def state(self) -> TrayState:
+        """Aktuell angezeigter Zustand."""
+        return self._state
+
     def start(self) -> None:
-        """Startet den Tray-Dienst auf dem Session-Bus."""
+        """Meldet das Symbol am Sitzungsbus an und beobachtet den Watcher."""
         try:
             self._connection = Gio.bus_get_sync(Gio.BusType.SESSION, None)
-        except GLib.Error as err:
-            log.warning("DBus Session-Bus nicht verfuegbar fuer Tray: %s", err)
+        except GLib.Error as error:
+            log.warning("Sitzungsbus nicht verfuegbar, kein Symbol im Infobereich: %s", error)
             return
 
-        # 1. StatusNotifierItem registrieren
-        self._sni_reg_id = self._connection.register_object(
-            "/StatusNotifierItem",
-            self._sni_info,
-            self._handle_sni_method_call,
-            self._handle_sni_get_property,
-            None,
-        )
+        try:
+            self._sni_reg_id = self._connection.register_object(
+                ITEM_PATH,
+                self._sni_info,
+                self._handle_sni_method_call,
+                self._handle_sni_get_property,
+                None,
+            )
+            self._menu_reg_id = self._connection.register_object(
+                MENU_PATH,
+                self._menu_info,
+                self._handle_menu_method_call,
+                self._handle_menu_get_property,
+                None,
+            )
+        except GLib.Error as error:
+            log.warning("Symbol im Infobereich konnte nicht angelegt werden: %s", error)
+            return
 
-        # 2. DBusMenu registrieren
-        self._menu_reg_id = self._connection.register_object(
-            "/StatusNotifierMenu",
-            self._menu_info,
-            self._handle_menu_method_call,
-            self._handle_menu_get_property,
-            None,
-        )
-
-        # 3. Eindeutigen Busnamen anfordern
-        pid = os.getpid()
-        bus_name = f"org.kde.StatusNotifierItem-{pid}-1"
-
-        def on_name_acquired(
-            conn: Gio.DBusConnection, name: str, _user_data: object = None
-        ) -> None:
-            self._register_with_watcher(conn, name)
-
+        self._bus_name = f"org.kde.StatusNotifierItem-{os.getpid()}-1"
         self._bus_name_id = Gio.bus_own_name_on_connection(
             self._connection,
-            bus_name,
+            self._bus_name,
             Gio.BusNameOwnerFlags.NONE,
-            on_name_acquired,
-            None,
+            self._on_name_acquired,
+            self._on_name_lost,
+        )
+        # Der Watcher gehoert zur Kontrollleiste und kann spaeter erscheinen,
+        # verschwinden und wiederkommen (Anmeldung, plasmashell-Neustart).
+        self._watch_id = Gio.bus_watch_name_on_connection(
+            self._connection,
+            WATCHER_NAME,
+            Gio.BusNameWatcherFlags.NONE,
+            self._on_watcher_appeared,
+            self._on_watcher_vanished,
         )
 
     def stop(self) -> None:
-        """Beendet den Tray-Dienst und raeumt DBus-Registrierungen auf."""
-        if self._bus_name_id and self._connection:
+        """Meldet das Symbol ab und raeumt alle Registrierungen auf."""
+        if self._watch_id:
+            Gio.bus_unwatch_name(self._watch_id)
+            self._watch_id = 0
+        if self._bus_name_id:
             Gio.bus_unown_name(self._bus_name_id)
             self._bus_name_id = 0
-        if self._sni_reg_id and self._connection:
-            self._connection.unregister_object(self._sni_reg_id)
-            self._sni_reg_id = 0
-        if self._menu_reg_id and self._connection:
-            self._connection.unregister_object(self._menu_reg_id)
-            self._menu_reg_id = 0
+        if self._connection is not None:
+            if self._sni_reg_id:
+                self._connection.unregister_object(self._sni_reg_id)
+                self._sni_reg_id = 0
+            if self._menu_reg_id:
+                self._connection.unregister_object(self._menu_reg_id)
+                self._menu_reg_id = 0
+        self._registered = False
+        self._name_acquired = False
+
+    def _on_name_acquired(self, *_args: object) -> None:
+        self._name_acquired = True
+        self._try_register()
+
+    def _on_name_lost(self, *_args: object) -> None:
+        self._name_acquired = False
+        self._registered = False
+
+    def _on_watcher_appeared(self, *_args: object) -> None:
+        self._watcher_present = True
+        self._registered = False
+        self._try_register()
+
+    def _on_watcher_vanished(self, *_args: object) -> None:
+        if self._registered:
+            log.info("Infobereich ist verschwunden; das Symbol wird bei Rueckkehr neu angemeldet.")
+        self._watcher_present = False
+        self._registered = False
+
+    def _try_register(self) -> None:
+        """Meldet das Symbol an, sobald Busname und Watcher vorhanden sind."""
+        if self._connection is None or self._registered:
+            return
+        if not (self._name_acquired and self._watcher_present):
+            return
+        self._connection.call(
+            WATCHER_NAME,
+            WATCHER_PATH,
+            WATCHER_NAME,
+            "RegisterStatusNotifierItem",
+            GLib.Variant("(s)", (self._bus_name,)),
+            None,
+            Gio.DBusCallFlags.NONE,
+            5000,
+            None,
+            self._on_watcher_registered,
+        )
+
+    def _on_watcher_registered(
+        self, connection: Gio.DBusConnection, result: Gio.AsyncResult, _user_data: object = None
+    ) -> None:
+        try:
+            connection.call_finish(result)
+        except GLib.Error as error:
+            log.warning("Anmeldung im Infobereich fehlgeschlagen: %s", error.message)
+            return
+        self._registered = True
+        log.info("ProtonSyncUI erfolgreich im System-Tray registriert.")
+
+    # ------------------------------------------------------------------
+    # Zustand
+    # ------------------------------------------------------------------
+
+    def set_state(self, state: TrayState, status_text: str) -> None:
+        """Setzt Zustand und Statuszeile und benachrichtigt die Arbeitsflaeche."""
+        if state is self._state and status_text == self._status_text:
+            return
+        state_changed = state is not self._state
+        self._state = state
+        self._status_text = status_text
+        self._menu_revision += 1
+
+        self._emit(ITEM_INTERFACE, ITEM_PATH, "NewToolTip")
+        if state_changed:
+            self._emit(ITEM_INTERFACE, ITEM_PATH, "NewIcon")
+            self._emit(ITEM_INTERFACE, ITEM_PATH, "NewAttentionIcon")
+            self._emit(
+                ITEM_INTERFACE, ITEM_PATH, "NewStatus", GLib.Variant("(s)", (self._sni_status(),))
+            )
+        self._emit(
+            MENU_INTERFACE,
+            MENU_PATH,
+            "LayoutUpdated",
+            GLib.Variant("(ui)", (self._menu_revision, 0)),
+        )
 
     def update_status(
         self, status_text: str, *, is_syncing: bool = False, has_error: bool = False
     ) -> None:
-        """Aktualisiert den Status, das Icon und den Tooltip im Tray."""
-        self._status_text = status_text
-        self._is_syncing = is_syncing
-        self._has_error = has_error
-
+        """Bequeme Variante von :meth:`set_state` (aeltere Schnittstelle)."""
         if is_syncing:
-            self._icon_name = "emblem-synchronizing-symbolic"
+            state = TrayState.SYNCING
         elif has_error:
-            self._icon_name = "dialog-error-symbolic"
+            state = TrayState.ERROR
         else:
-            self._icon_name = APP_ID
+            state = TrayState.IDLE
+        self.set_state(state, status_text)
 
-        if self._connection:
-            self._connection.emit_signal(
-                None,
-                "/StatusNotifierItem",
-                "org.kde.StatusNotifierItem",
-                "NewIcon",
-                None,
-            )
-            self._connection.emit_signal(
-                None,
-                "/StatusNotifierItem",
-                "org.kde.StatusNotifierItem",
-                "NewToolTip",
-                None,
-            )
-
-    def _register_with_watcher(self, conn: Gio.DBusConnection, item_name: str) -> None:
-        """Registriert das Item bei org.kde.StatusNotifierWatcher."""
-        try:
-            conn.call(
-                "org.kde.StatusNotifierWatcher",
-                "/StatusNotifierWatcher",
-                "org.kde.StatusNotifierWatcher",
-                "RegisterStatusNotifierItem",
-                GLib.Variant("(s)", (item_name,)),
-                None,
-                Gio.DBusCallFlags.NONE,
-                2000,
-                None,
-                self._on_watcher_registered,
-            )
-        except Exception as err:
-            log.debug("StatusNotifierWatcher Aufruf fehlgeschlagen: %s", err)
-
-    def _on_watcher_registered(
-        self, conn: Gio.DBusConnection, res: Gio.AsyncResult, _user_data: object = None
+    def _emit(
+        self, interface: str, path: str, signal: str, parameters: GLib.Variant | None = None
     ) -> None:
+        if self._connection is None:
+            return
         try:
-            conn.call_finish(res)
-            log.info("ProtonSyncUI erfolgreich im System-Tray registriert.")
-        except Exception as err:
-            log.debug("Watcher Rueckmeldung: %s", err)
+            self._connection.emit_signal(None, path, interface, signal, parameters)
+        except GLib.Error as error:
+            log.debug("Signal %s konnte nicht gesendet werden: %s", signal, error)
+
+    def _sni_status(self) -> str:
+        """SNI-Status: ``NeedsAttention`` laesst Plasma das Symbol einblenden."""
+        return "NeedsAttention" if self._state is TrayState.ERROR else "Active"
+
+    def _pixmaps(self, state: TrayState) -> list[tuple[int, int, bytes]]:
+        if state not in self._pixmap_cache:
+            self._pixmap_cache[state] = render_icon_pixmaps(state)
+        return self._pixmap_cache[state]
+
+    def _icon_name(self) -> str:
+        """Symbolname. Ausser im Ruhezustand leer, damit die Pixmap mit Marke gilt."""
+        if self._state is TrayState.IDLE or not self._pixmaps(self._state):
+            return APP_ID
+        return ""
 
     # ------------------------------------------------------------------
-    # SNI DBus Dispatcher
+    # StatusNotifierItem
     # ------------------------------------------------------------------
 
     def _handle_sni_method_call(
@@ -326,7 +502,7 @@ class TrayService:
         invocation: Gio.DBusMethodInvocation,
     ) -> None:
         if method_name in ("Activate", "SecondaryActivate"):
-            GLib.idle_add(self._on_show_window)
+            GLib.idle_add(self._call, self._on_show_window)
             invocation.return_value(None)
         elif method_name in ("ContextMenu", "Scroll"):
             invocation.return_value(None)
@@ -345,38 +521,83 @@ class TrayService:
         _interface_name: str,
         property_name: str,
     ) -> GLib.Variant:
-        if property_name == "Category":
-            return GLib.Variant("s", "ApplicationStatus")
-        if property_name == "Id":
-            return GLib.Variant("s", "ProtonSyncUI")
-        if property_name == "Title":
-            return GLib.Variant("s", self._title)
-        if property_name == "Status":
-            return GLib.Variant("s", "Active")
-        if property_name == "WindowId":
-            return GLib.Variant("i", 0)
-        if property_name == "IconThemePath":
-            return GLib.Variant("s", str(Path.home() / ".local" / "share" / "icons"))
-        if property_name == "IconName":
-            return GLib.Variant("s", self._icon_name)
-        if property_name in ("IconPixmap", "OverlayIconPixmap", "AttentionIconPixmap"):
-            if not self._icon_pixmaps:
-                self._icon_pixmaps = _render_icon_pixmaps()
-            return GLib.Variant("a(iiay)", self._icon_pixmaps)
-        if property_name in ("OverlayIconName", "AttentionIconName", "AttentionMovieName"):
-            return GLib.Variant("s", "")
-        if property_name == "ItemIsMenu":
-            return GLib.Variant("b", False)
-        if property_name == "Menu":
-            return GLib.Variant("o", "/StatusNotifierMenu")
-        if property_name == "ToolTip":
-            tooltip_sub = f"ProtonSyncUI: {self._status_text}"
-            return GLib.Variant("(sa(iiay)ss)", (self._icon_name, [], self._title, tooltip_sub))
+        match property_name:
+            case "Category":
+                return GLib.Variant("s", "ApplicationStatus")
+            case "Id":
+                return GLib.Variant("s", APP_ID)
+            case "Title":
+                return GLib.Variant("s", self._title)
+            case "Status":
+                return GLib.Variant("s", self._sni_status())
+            case "WindowId":
+                return GLib.Variant("i", 0)
+            case "IconThemePath":
+                return GLib.Variant("s", "")
+            case "IconName":
+                return GLib.Variant("s", self._icon_name())
+            case "IconPixmap":
+                return GLib.Variant("a(iiay)", self._pixmaps(self._state))
+            case "AttentionIconName":
+                return GLib.Variant("s", "")
+            case "AttentionIconPixmap":
+                return GLib.Variant("a(iiay)", self._pixmaps(TrayState.ERROR))
+            case "OverlayIconPixmap":
+                return GLib.Variant("a(iiay)", [])
+            case "OverlayIconName" | "AttentionMovieName":
+                return GLib.Variant("s", "")
+            case "ItemIsMenu":
+                return GLib.Variant("b", False)
+            case "Menu":
+                return GLib.Variant("o", MENU_PATH)
+            case "ToolTip":
+                return GLib.Variant("(sa(iiay)ss)", (APP_ID, [], self._title, self._status_text))
         return GLib.Variant("s", "")
 
     # ------------------------------------------------------------------
-    # DBusMenu Dispatcher
+    # DBusMenu
     # ------------------------------------------------------------------
+
+    def _menu_items(self) -> list[tuple[int, dict[str, GLib.Variant]]]:
+        """Eintraege des Kontextmenues als (Kennung, Eigenschaften)."""
+
+        def entry(label: str, *, enabled: bool = True, icon: str = "") -> dict[str, GLib.Variant]:
+            props = {
+                "label": GLib.Variant("s", label),
+                "enabled": GLib.Variant("b", enabled),
+                "visible": GLib.Variant("b", True),
+            }
+            if icon:
+                props["icon-name"] = GLib.Variant("s", icon)
+            return props
+
+        separator = {"type": GLib.Variant("s", "separator"), "visible": GLib.Variant("b", True)}
+        items = [
+            (MENU_STATUS, entry(self._status_text, enabled=False)),
+            (2, separator),
+            (MENU_OPEN, entry(f"{APP_TITLE} oeffnen", icon="window-new")),
+            (
+                MENU_SYNC,
+                entry(
+                    "Alle jetzt synchronisieren",
+                    enabled=self._state is not TrayState.SYNCING,
+                    icon="view-refresh",
+                ),
+            ),
+        ]
+        if self._on_check_update is not None:
+            items.append((MENU_UPDATE, entry("Nach Updates suchen", icon="system-software-update")))
+        items += [(6, separator), (MENU_QUIT, entry("Beenden", icon="application-exit"))]
+        return items
+
+    def _build_menu_layout(self) -> tuple[int, dict[str, GLib.Variant], list[Any]]:
+        """Erstellt die DBusMenu-Struktur ``(ia{sv}av)``."""
+        root_props = {"children-display": GLib.Variant("s", "submenu")}
+        children = [
+            GLib.Variant("(ia{sv}av)", (item_id, props, []))
+            for item_id, props in self._menu_items()
+        ]
+        return (0, root_props, children)
 
     def _handle_menu_method_call(
         self,
@@ -389,20 +610,31 @@ class TrayService:
         invocation: Gio.DBusMethodInvocation,
     ) -> None:
         if method_name == "GetLayout":
-            layout = self._build_menu_layout()
-            invocation.return_value(GLib.Variant("(u(ia{sv}av))", (1, layout)))
+            invocation.return_value(
+                GLib.Variant("(u(ia{sv}av))", (self._menu_revision, self._build_menu_layout()))
+            )
         elif method_name == "GetGroupProperties":
-            invocation.return_value(GLib.Variant("(a(ia{sv}))", ([])))
+            wanted = set(parameters[0])
+            properties = [
+                (item_id, props)
+                for item_id, props in self._menu_items()
+                if not wanted or item_id in wanted
+            ]
+            invocation.return_value(GLib.Variant("(a(ia{sv}))", (properties,)))
         elif method_name == "GetProperty":
-            invocation.return_value(GLib.Variant("(v)", (GLib.Variant("s", ""),)))
+            item_id, name = parameters[0], parameters[1]
+            props = dict(self._menu_items()).get(item_id, {})
+            value = props.get(name, GLib.Variant("s", ""))
+            invocation.return_value(GLib.Variant("(v)", (value,)))
         elif method_name == "Event":
-            item_id = parameters[0]
-            event_id = parameters[1]
-            if event_id == "clicked":
-                self._handle_menu_click(item_id)
+            if parameters[1] == "clicked":
+                self._handle_menu_click(parameters[0])
             invocation.return_value(None)
         elif method_name == "EventGroup":
-            invocation.return_value(GLib.Variant("(ai)", ([])))
+            for event in parameters[0]:
+                if event[1] == "clicked":
+                    self._handle_menu_click(event[0])
+            invocation.return_value(GLib.Variant("(ai)", ([],)))
         elif method_name == "AboutToShow":
             invocation.return_value(GLib.Variant("(b)", (False,)))
         elif method_name == "AboutToShowGroup":
@@ -422,76 +654,36 @@ class TrayService:
         _interface_name: str,
         property_name: str,
     ) -> GLib.Variant:
-        if property_name == "Version":
-            return GLib.Variant("u", 3)
-        if property_name == "TextDirection":
-            return GLib.Variant("s", "ltr")
-        if property_name == "Status":
-            return GLib.Variant("s", "normal")
-        if property_name == "IconThemePath":
-            return GLib.Variant("as", [str(Path.home() / ".local" / "share" / "icons")])
+        match property_name:
+            case "Version":
+                return GLib.Variant("u", 3)
+            case "TextDirection":
+                return GLib.Variant("s", "ltr")
+            case "Status":
+                return GLib.Variant("s", "normal")
+            case "IconThemePath":
+                return GLib.Variant("as", [])
         return GLib.Variant("s", "")
 
-    def _build_menu_layout(self) -> tuple[int, dict[str, GLib.Variant], list[Any]]:
-        """Erstellt die DBusMenu-Struktur (ia{sv}av)."""
-        root_props: dict[str, GLib.Variant] = {"children-display": GLib.Variant("s", "submenu")}
-
-        items: list[tuple[int, dict[str, GLib.Variant], list[Any]]] = [
-            (
-                1,
-                {
-                    "label": GLib.Variant("s", "ProtonSyncUI oeffnen"),
-                    "enabled": GLib.Variant("b", True),
-                    "visible": GLib.Variant("b", True),
-                },
-                [],
-            ),
-            (
-                2,
-                {
-                    "type": GLib.Variant("s", "separator"),
-                    "visible": GLib.Variant("b", True),
-                },
-                [],
-            ),
-            (
-                3,
-                {
-                    "label": GLib.Variant("s", "Alle jetzt synchronisieren"),
-                    "enabled": GLib.Variant("b", not self._is_syncing),
-                    "visible": GLib.Variant("b", True),
-                },
-                [],
-            ),
-            (
-                4,
-                {
-                    "type": GLib.Variant("s", "separator"),
-                    "visible": GLib.Variant("b", True),
-                },
-                [],
-            ),
-            (
-                5,
-                {
-                    "label": GLib.Variant("s", "Beenden"),
-                    "enabled": GLib.Variant("b", True),
-                    "visible": GLib.Variant("b", True),
-                },
-                [],
-            ),
-        ]
-
-        return (0, root_props, [GLib.Variant("(ia{sv}av)", item) for item in items])
-
     def _handle_menu_click(self, item_id: int) -> None:
-        """Fuehrt die Aktion eines Menue-Eintrags aus."""
-        if item_id == 1:
-            GLib.idle_add(self._on_show_window)
-        elif item_id == 3:
-            GLib.idle_add(self._on_sync_all)
-        elif item_id == 5:
-            GLib.idle_add(self._on_quit)
+        """Fuehrt die Aktion eines Menue-Eintrags im Hauptthread aus."""
+        callbacks = {
+            MENU_OPEN: self._on_show_window,
+            MENU_SYNC: self._on_sync_all,
+            MENU_UPDATE: self._on_check_update,
+            MENU_QUIT: self._on_quit,
+        }
+        callback = callbacks.get(item_id)
+        if callback is not None:
+            GLib.idle_add(self._call, callback)
+
+    @staticmethod
+    def _call(callback: Callable[[], None]) -> bool:
+        try:
+            callback()
+        except Exception:
+            log.exception("Aktion aus dem Infobereich fehlgeschlagen")
+        return GLib.SOURCE_REMOVE
 
 
-__all__ = ["TrayService"]
+__all__ = ["TrayService", "TrayState", "find_icon_file", "render_icon_pixmaps"]

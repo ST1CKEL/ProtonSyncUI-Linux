@@ -103,7 +103,11 @@ class ActivityView(Gtk.Box):
             self._rows.append(row)
 
     def _create_run_row(self, run: RunRecord) -> Adw.ExpanderRow:
-        ts = run.finished_at.strftime("%d.%m.%Y %H:%M:%S") if run.finished_at else "Laeuft"
+        ts = (
+            run.finished_at.astimezone().strftime("%d.%m.%Y %H:%M:%S")
+            if run.finished_at
+            else "Laeuft"
+        )
         title = f"Lauf vom {ts}"
         if run.dry_run:
             title += " (Dry-Run Vorschau)"
@@ -154,7 +158,7 @@ class ActivityView(Gtk.Box):
         text = (
             f"ProtonSyncUI Lauf:\n"
             f"Status: {run.status.value}\n"
-            f"Zeit: {run.finished_at}\n"
+            f"Zeit: {run.finished_at.astimezone() if run.finished_at else 'laeuft'}\n"
             f"Meldung: {run.message}\n"
             f"Dateien geplant: {run.planned_files}, uebertragen: {run.transferred_files}\n"
             f"Upload: {run.uploaded_bytes} B, Download: {run.downloaded_bytes} B"

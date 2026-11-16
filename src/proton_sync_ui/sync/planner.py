@@ -68,7 +68,7 @@ def build_plan(
     remote_by_key = remote_scan.by_key() if remote_scan is not None else {}
 
     all_keys = sorted(
-        set(local_by_key.keys()) | set(remote_by_key.keys()) | set(states.keys()) - skip_keys
+        (set(local_by_key.keys()) | set(remote_by_key.keys()) | set(states.keys())) - skip_keys
     )
 
     mode = pair.sync_mode
@@ -78,6 +78,26 @@ def build_plan(
         remote = remote_by_key.get(key)
         state = states.get(key)
         rel_path = PurePosixPath(key)
+
+        if (
+            remote_scan is not None
+            and mode is not SyncMode.UPLOAD_ONLY
+            and remote_scan.is_unreadable(key)
+        ):
+            # Der Cloud-Ordner dieser Datei konnte nicht gelesen werden. Ohne
+            # gesicherten Cloud-Stand wird weder uebertragen noch ein Zustand
+            # veraendert -- der naechste Lauf entscheidet neu.
+            size = local.size_bytes if local else (state.size_bytes if state else 0)
+            items.append(
+                PlanItem(
+                    relative_path=rel_path,
+                    action=PlanAction.SKIP_REMOTE_UNKNOWN,
+                    size_bytes=size,
+                    mtime_ns=local.mtime_ns if local else 0,
+                    reason="Cloud-Ordner konnte nicht gelesen werden; Datei wird zurueckgestellt.",
+                )
+            )
+            continue
 
         if mode is SyncMode.UPLOAD_ONLY or remote_scan is None:
             _plan_upload_only(

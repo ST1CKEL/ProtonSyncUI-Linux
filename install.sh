@@ -9,7 +9,14 @@
 # Optionen:
 #   -y, --yes          Nicht-interaktive Installation (Bestaetigt Prompts automatisch)
 #   --no-deps          Keine Systempakete via sudo installieren
-#   --dev              Zusaetzlich Entwicklungs-Abhaengigkeiten (pytest, ruff, mypy) installieren
+#   --dev              Entwicklermodus: Startbefehle verweisen direkt auf diesen Quellbaum
+#   --autostart        Start bei der Anmeldung einrichten (minimiert im Infobereich)
+#
+# Die Anwendung benoetigt ausschliesslich die Python-Standardbibliothek und
+# die PyGObject-Systempakete. Sie wird deshalb OHNE virtuelle Umgebung
+# installiert: Eine venv ist fest an die Python-Version gebunden und war nach
+# jedem Fedora-Versionssprung (Python 3.14 -> 3.15 -> ...) unbrauchbar --
+# Autostart und Timer liefen dann ins Leere.
 #
 # Rueckgaengig machen: ./uninstall.sh
 
@@ -19,7 +26,8 @@ APP_ID="io.github.protonsyncui.ProtonSyncUI"
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 DATA_HOME="${XDG_DATA_HOME:-$HOME/.local/share}"
-VENV_DIR="$DATA_HOME/proton-sync-ui/venv"
+APP_DIR="$DATA_HOME/proton-sync-ui/app"
+LEGACY_VENV_DIR="$DATA_HOME/proton-sync-ui/venv"
 BIN_DIR="$HOME/.local/bin"
 APPS_DIR="$DATA_HOME/applications"
 ICON_DIR="$DATA_HOME/icons/hicolor/scalable/apps"
@@ -29,12 +37,14 @@ MIN_PY_MINOR=13
 AUTO_YES=0
 NO_DEPS=0
 DEV_MODE=0
+AUTOSTART=0
 
 for arg in "$@"; do
     case "$arg" in
         -y|--yes) AUTO_YES=1 ;;
         --no-deps) NO_DEPS=1 ;;
         --dev) DEV_MODE=1 ;;
+        --autostart) AUTOSTART=1 ;;
         -h|--help)
             cat <<EOF
 Verwendung: ./install.sh [OPTIONEN]
@@ -42,7 +52,8 @@ Verwendung: ./install.sh [OPTIONEN]
 Optionen:
   -y, --yes          Automatische Bestaetigung aller Abfragen
   --no-deps          Ueberspringt die Pruefung/Installation von Systempaketen
-  --dev              Installiert zusaetzlich Entwickler-Tools (pytest, ruff, mypy)
+  --dev              Entwicklermodus: Startbefehle nutzen direkt diesen Quellbaum
+  --autostart        Start bei der Anmeldung einrichten (minimiert im Infobereich)
   -h, --help         Diese Hilfe anzeigen
 EOF
             exit 0
@@ -58,8 +69,17 @@ die()   { printf '\033[1;31mFehler:\033[0m %s\n' "$*" >&2; exit 1; }
 # ---------------------------------------------------------------------------
 # 1. Systemabhaengigkeiten pruefen & installieren
 # ---------------------------------------------------------------------------
+# Der Systeminterpreter, nicht ein zufaellig aktives venv/pyenv: nur er kennt
+# die PyGObject-Systempakete und bleibt ueber Distributions-Upgrades gueltig.
+if [[ -x /usr/bin/python3 ]]; then
+    PYTHON=/usr/bin/python3
+else
+    PYTHON="$(command -v python3 || true)"
+fi
+[[ -n "$PYTHON" ]] || die "python3 wurde nicht gefunden."
+
 check_python_gi() {
-    python3 - <<'PY' 2>/dev/null
+    "$PYTHON" - <<'PY' 2>/dev/null
 import gi
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
@@ -125,57 +145,83 @@ install_system_deps
 # ---------------------------------------------------------------------------
 info "Laufzeit-Voraussetzungen pruefen"
 
-command -v python3 >/dev/null || die "python3 wurde nicht gefunden."
-PY_MAJOR="$(python3 -c 'import sys; print(sys.version_info.major)')"
-PY_MINOR="$(python3 -c 'import sys; print(sys.version_info.minor)')"
+PY_MAJOR="$("$PYTHON" -c 'import sys; print(sys.version_info.major)')"
+PY_MINOR="$("$PYTHON" -c 'import sys; print(sys.version_info.minor)')"
 if [[ "$PY_MAJOR" -lt 3 || "$PY_MINOR" -lt "$MIN_PY_MINOR" ]]; then
-    die "Python 3.${MIN_PY_MINOR} oder neuer noetig, gefunden $(python3 --version)."
+    die "Python 3.${MIN_PY_MINOR} oder neuer noetig, gefunden $("$PYTHON" --version)."
 fi
-ok "$(python3 --version)"
+ok "$("$PYTHON" --version) ($PYTHON)"
 
 if command -v proton-drive >/dev/null; then
     ok "proton-drive gefunden: $(command -v proton-drive)"
 else
     warn "proton-drive CLI ist aktuell nicht im PATH installiert."
-    warn "Hinweis: ProtonSyncUI startet trotzdem. Du kannst proton-drive nachinstallieren mit:"
-    warn "  pip install proton-drive  (oder ueber die offizielle Proton-Quelle)"
+    warn "ProtonSyncUI startet trotzdem. Die CLI gibt es bei Proton:"
+    warn "  https://proton.me/download/drive/cli/index.html"
 fi
 
 # ---------------------------------------------------------------------------
-# 3. Laufzeitumgebung anlegen & Paket installieren
+# 3. Anwendung kopieren
 # ---------------------------------------------------------------------------
-info "Laufzeitumgebung anlegen: $VENV_DIR"
-
-mkdir -p "$(dirname "$VENV_DIR")"
-if [[ -d "$VENV_DIR" ]]; then
-    warn "Bestehende Umgebung wird ersetzt."
-    rm -rf "$VENV_DIR"
-fi
-
-# --system-site-packages ist zwingend fuer PyGObject/libadwaita Bindings
-python3 -m venv --system-site-packages "$VENV_DIR"
-"$VENV_DIR/bin/python" -m pip install --quiet --upgrade pip setuptools wheel
-ok "Python venv erstellt"
-
-info "ProtonSyncUI installieren"
 if [[ "$DEV_MODE" -eq 1 ]]; then
-    "$VENV_DIR/bin/python" -m pip install --quiet -e "$PROJECT_DIR[dev]"
-    ok "ProtonSyncUI im Entwicklermodus (-e .[dev]) installiert"
+    info "Entwicklermodus: Quellbaum wird direkt verwendet"
+    PACKAGE_PARENT="$PROJECT_DIR/src"
+    ok "$PACKAGE_PARENT"
 else
-    "$VENV_DIR/bin/python" -m pip install --quiet "$PROJECT_DIR"
-    ok "Version $("$VENV_DIR/bin/proton-sync-ui" --version | awk '{print $NF}') installiert"
+    info "ProtonSyncUI installieren: $APP_DIR"
+    PACKAGE_PARENT="$APP_DIR"
+    STAGING="$APP_DIR.new.$$"
+    rm -rf "$STAGING"
+    mkdir -p "$STAGING"
+    cp -r "$PROJECT_DIR/src/proton_sync_ui" "$STAGING/proton_sync_ui"
+    find "$STAGING" -name '__pycache__' -type d -prune -exec rm -rf {} +
+    mkdir -p "$STAGING/proton_sync_ui/data"
+    install -m 644 "$PROJECT_DIR/data/icons/$APP_ID.svg" "$STAGING/proton_sync_ui/data/$APP_ID.svg"
+    # Erst vollstaendig kopieren, dann austauschen: Ein laufender Timer-Lauf
+    # sieht nie einen halb geschriebenen Stand.
+    rm -rf "$APP_DIR.old"
+    [[ -d "$APP_DIR" ]] && mv "$APP_DIR" "$APP_DIR.old"
+    mv "$STAGING" "$APP_DIR"
+    rm -rf "$APP_DIR.old"
+fi
+
+if [[ -d "$LEGACY_VENV_DIR" ]]; then
+    rm -rf "$LEGACY_VENV_DIR"
+    ok "Alte virtuelle Umgebung entfernt (nicht mehr noetig)"
 fi
 
 # ---------------------------------------------------------------------------
-# 4. Startbefehle im Benutzer-Pfad verlinken
+# 4. Startbefehle im Benutzer-Pfad anlegen
 # ---------------------------------------------------------------------------
 info "Startbefehle einrichten: $BIN_DIR"
 
 mkdir -p "$BIN_DIR"
-for cmd in proton-sync-ui proton-sync-ui-gui; do
-    ln -sfn "$VENV_DIR/bin/$cmd" "$BIN_DIR/$cmd"
-    ok "$BIN_DIR/$cmd"
-done
+write_launcher() {
+    local name="$1" module="$2"
+    local target="$BIN_DIR/$name"
+    # Fruehere Versionen legten hier Symlinks in die venv an -- erst entfernen,
+    # sonst wuerde durch den Link hindurch geschrieben.
+    rm -f "$target"
+    cat > "$target" <<LAUNCHER
+#!$PYTHON -P
+# Startbefehl von ProtonSyncUI -- erzeugt von install.sh. Nicht bearbeiten.
+import sys
+
+sys.path.insert(0, r"""$PACKAGE_PARENT""")
+from $module import main
+
+if __name__ == "__main__":
+    sys.exit(main())
+LAUNCHER
+    chmod 755 "$target"
+    ok "$target"
+}
+write_launcher proton-sync-ui proton_sync_ui.cli.main
+write_launcher proton-sync-ui-gui proton_sync_ui.ui.application
+
+INSTALLED_VERSION="$("$BIN_DIR/proton-sync-ui" --version | awk '{print $NF}')" \
+    || die "Die installierte Anwendung laesst sich nicht starten."
+ok "Version $INSTALLED_VERSION installiert"
 
 case ":$PATH:" in
     *":$BIN_DIR:"*) ;;
@@ -200,7 +246,7 @@ if [[ ! -f "$DATA_HOME/icons/hicolor/index.theme" && -f /usr/share/icons/hicolor
 fi
 
 # Raster-PNGs in Standardgroessen (16, 22, 24, 32, 48, 64, 128, 256, 512) rendern
-python3 - "$PROJECT_DIR/data/icons/$APP_ID.svg" "$DATA_HOME" "$APP_ID" <<'PY' 2>/dev/null || true
+"$PYTHON" - "$PROJECT_DIR/data/icons/$APP_ID.svg" "$DATA_HOME" "$APP_ID" <<'PY' 2>/dev/null || true
 import sys
 from pathlib import Path
 try:
@@ -232,12 +278,20 @@ ok "Symbole in 16px, 22px, 24px, 32px, 48px, 64px, 128px, 256px und 512px einger
 install -m 644 "$PROJECT_DIR/data/$APP_ID.desktop" "$APPS_DIR/$APP_ID.desktop"
 sed -i "s|^Exec=proton-sync-ui-gui|Exec=$BIN_DIR/proton-sync-ui-gui|" "$APPS_DIR/$APP_ID.desktop"
 
-# Bestehenden Autostart-Eintrag bei Bedarf ebenfalls auf den absoluten Pfad aktualisieren
-AUTOSTART_FILE="${XDG_CONFIG_HOME:-$HOME/.config}/autostart/$APP_ID.desktop"
-if [[ -f "$AUTOSTART_FILE" ]]; then
-    sed -i "s|^Exec=proton-sync-ui-gui|Exec=$BIN_DIR/proton-sync-ui-gui|" "$AUTOSTART_FILE"
-fi
 ok "$APPS_DIR/$APP_ID.desktop"
+
+# Autostart: neu einrichten (--autostart) oder bestehenden Eintrag auf den
+# aktuellen Programmpfad bringen.
+if [[ "$AUTOSTART" -eq 1 ]]; then
+    "$BIN_DIR/proton-sync-ui" autostart on >/dev/null && ok "Autostart bei der Anmeldung eingerichtet"
+else
+    "$BIN_DIR/proton-sync-ui" autostart refresh >/dev/null 2>&1 || true
+fi
+
+# systemd-Units bestehender Zeitplaene auf den aktuellen Stand bringen.
+if command -v systemctl >/dev/null 2>&1; then
+    "$BIN_DIR/proton-sync-ui" systemd sync >/dev/null 2>&1 && ok "Zeitplaene (systemd-Timer) aktualisiert" || true
+fi
 
 if command -v desktop-file-validate >/dev/null 2>&1; then
     if desktop-file-validate "$APPS_DIR/$APP_ID.desktop"; then
@@ -274,10 +328,13 @@ Starten:
   - Terminal (Status/CLI):             proton-sync-ui status
 
 Einmalige Anmeldung bei Proton Drive (falls noch nicht erfolgt):
-  proton-drive auth login
+  in der Anwendung auf "Anmelden" klicken -- oder: proton-drive auth login
 
-Anheften an das GNOME-Dash / Dock:
-  Anwendung starten, Rechtsklick auf das Symbol im Dock -> "Zu Favoriten hinzufuegen"
+Start bei der Anmeldung (KDE Plasma, GNOME):
+  proton-sync-ui autostart on        (oder in den Einstellungen der Anwendung)
+
+Updates:
+  proton-sync-ui update              (oder in den Einstellungen der Anwendung)
 
 Deinstallation:
   ./uninstall.sh
