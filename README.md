@@ -21,8 +21,12 @@
 </p>
 
 <p align="center">
+  <i>A modern, native GTK4 & libadwaita desktop application for two-way synchronization and automated backups with Proton Drive on Linux – available in German and English.</i>
+</p>
+
+<p align="center">
   Ein Projekt von <a href="https://stickelbroeck.com"><b>Stickelbroeck Labs</b></a> ·
-  <b>Deutsch</b> | <a href="README.en.md">English</a>
+  <b>Deutsch</b> | <a href="README.en.md">🇬🇧 English version</a>
 </p>
 
 ---
